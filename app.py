@@ -17,17 +17,44 @@ st_autorefresh(interval=60_000, key="auto_refresh")
 # Providers to poll
 # -----------------------
 PROVIDERS = [
-    # Statuspage-powered (JSON)
-    {"name": "Cloudflare", "kind": "statuspage", "url": "https://www.cloudflarestatus.com/api/v2/summary.json"},
-    {"name": "GitHub",     "kind": "statuspage", "url": "https://www.githubstatus.com/api/v2/summary.json"},
-    {"name": "OpenAI",     "kind": "statuspage", "url": "https://status.openai.com/api/v2/summary.json"},
+    {
+        "name": "AWS",
+        "kind": "rss",
+        "url": "https://status.aws.amazon.com/rss/all.rss",
+        "status_page": "https://health.aws.amazon.com/health/status",
+    },
+    {
+        "name": "Azure",
+        "kind": "rss",
+        "url": "https://azurestatuscdn.azureedge.net/en-us/status/feed/",
+        "status_page": "https://azure.status.microsoft",
+    },
+    {
+        "name": "Google Cloud (GCP)",
+        "kind": "gcp_incidents",
+        "url": "https://status.cloud.google.com/incidents.json",
+        "status_page": "https://status.cloud.google.com",
+    },
+    {
+        "name": "Microsoft 365",
+        "kind": "m365_graph",
+        "url": "https://graph.microsoft.com/v1.0/admin/serviceAnnouncement/healthOverviews",
+        "status_page": "https://status.cloud.microsoft",
+    },
 
-    # Slack official status API (JSON)
-    {"name": "Slack", "kind": "slack", "url": "https://slack-status.com/api/v2.0.0/current"},
-
-    # RSS feeds
-    {"name": "Azure", "kind": "rss", "url": "https://azurestatuscdn.azureedge.net/en-us/status/feed/"},
-    {"name": "AWS",   "kind": "rss", "url": "https://status.aws.amazon.com/rss/all.rss"},
+    # Optional extras (keep or delete as you like)
+    {
+        "name": "Cloudflare",
+        "kind": "statuspage",
+        "url": "https://www.cloudflarestatus.com/api/v2/summary.json",
+        "status_page": "https://www.cloudflarestatus.com",
+    },
+    {
+        "name": "OpenAI",
+        "kind": "statuspage",
+        "url": "https://status.openai.com/api/v2/summary.json",
+        "status_page": "https://status.openai.com",
+    },
 ]
 
 # -----------------------
@@ -36,20 +63,26 @@ PROVIDERS = [
 DEFAULT_TIMEOUT = 12
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_url(url: str, timeout: int = DEFAULT_TIMEOUT) -> bytes:
+def fetch_url(url: str, headers_items=None, timeout: int = DEFAULT_TIMEOUT) -> bytes:
     """
-    Single cached fetch for ALL providers. Caches raw bytes for 60s.
+    Cached fetch for ALL providers. Caches raw bytes for 60s.
+    headers_items is a tuple of (key, value) pairs so Streamlit can cache it.
     """
     headers = {
         "User-Agent": "OutageWatch/1.0 (+streamlit)",
         "Accept": "*/*",
     }
+    if headers_items:
+        for k, v in headers_items:
+            headers[k] = v
+
     r = requests.get(url, timeout=timeout, headers=headers)
     r.raise_for_status()
     return r.content
 
-def fetch_json(url: str):
-    raw = fetch_url(url)
+def fetch_json(url: str, headers: dict | None = None):
+    headers_items = tuple(sorted(headers.items())) if headers else None
+    raw = fetch_url(url, headers_items=headers_items)
     return requests.models.complexjson.loads(raw.decode("utf-8", errors="replace"))
 
 # -----------------------
@@ -63,7 +96,6 @@ def summarize_statuspage(url):
 
     status = data.get("status", {}) or {}
     indicator = status.get("indicator", "none")
-
     incidents = (data.get("incidents") or []) + (data.get("scheduled_maintenances") or [])
 
     major = indicator in {"major", "critical"} or any((i.get("impact") in {"major", "critical"}) for i in incidents)
@@ -80,35 +112,13 @@ def summarize_statuspage(url):
 
     return level, details
 
-def summarize_slack(url):
-    try:
-        data = fetch_json(url)
-    except Exception as e:
-        return "unknown", [f"Fetch/parse error: {e}"]
-
-    status = (data.get("status") or "ok").lower()
-    incidents = data.get("active_incidents") or data.get("incidents") or []
-
-    if status == "ok" and not incidents:
-        return "ok", []
-
-    # If there are incidents, assume degraded unless explicitly outage
-    level = "major" if any((inc.get("type") or "").lower() == "outage" for inc in incidents) else "degraded"
-
-    details = []
-    for inc in incidents[:3]:
-        details.append(
-            f"{inc.get('title','Incident')} — status: {inc.get('status','')} — updated: {inc.get('date_updated','')}"
-        )
-
-    return level, details
-
 def _rss_level_from_title(title_lower: str) -> str:
-    # words that usually indicate an active problem
     major_words = ["major outage", "outage", "unavailable", "down"]
-    degraded_words = ["degraded", "investigating", "identified", "monitoring", "issue", "error", "latency",
-                      "impact", "connectivity", "disruption", "partial"]
-
+    degraded_words = [
+        "degraded", "investigating", "identified", "monitoring",
+        "issue", "error", "latency", "impact", "connectivity",
+        "disruption", "partial"
+    ]
     resolved_words = ["resolved", "operating normally", "recovered", "restored"]
 
     if any(w in title_lower for w in resolved_words):
@@ -130,18 +140,13 @@ def summarize_rss(url):
     if not entries:
         return "ok", []
 
-    # Evaluate a small window of the most recent items:
-    # - If any look major, mark major
-    # - Else if any look degraded, mark degraded
-    # - Else ok
     window = entries[:5]
     levels = []
     details = []
 
     for e in window:
         t = unescape(getattr(e, "title", "Update"))
-        tl = t.lower()
-        lvl = _rss_level_from_title(tl)
+        lvl = _rss_level_from_title(t.lower())
         levels.append(lvl)
 
         ts = getattr(e, "published", "") or getattr(e, "updated", "")
@@ -156,20 +161,88 @@ def summarize_rss(url):
 
     return level, details[:3]
 
+def summarize_gcp_incidents(url):
+    try:
+        incidents = fetch_json(url)  # incidents.json is an array
+    except Exception as e:
+        return "unknown", [f"Fetch/parse error: {e}"]
+
+    if not incidents:
+        return "ok", []
+
+    active = []
+    for inc in incidents:
+        # if "end" (or similar) is absent, treat as ongoing
+        end = inc.get("end") or inc.get("resolved")
+        if not end:
+            active.append(inc)
+
+    if not active:
+        return "ok", []
+
+    level = "degraded"
+    details = []
+    for inc in active[:3]:
+        title = inc.get("title") or inc.get("service_name") or "Incident"
+        begin = inc.get("begin") or inc.get("start") or ""
+        severity = (inc.get("severity") or inc.get("impact") or "").lower()
+
+        if "high" in severity or "major" in severity:
+            level = "major"
+
+        details.append(f"{title} — started: {begin} — severity/impact: {severity or 'n/a'}")
+
+    return level, details
+
+def summarize_m365_graph(url):
+    token = st.secrets.get("M365_GRAPH_TOKEN", "")
+    if not token:
+        return "unknown", ["Microsoft 365 requires Graph auth. Add M365_GRAPH_TOKEN in Streamlit Secrets."]
+
+    headers = {"Authorization": f"Bearer {token}"}
+
+    try:
+        data = fetch_json(url, headers=headers)
+    except Exception as e:
+        return "unknown", [f"Fetch/parse error (Graph): {e}"]
+
+    items = data.get("value", []) or []
+    if not items:
+        return "ok", []
+
+    bad = [x for x in items if (x.get("status") or "").lower() != "serviceoperational"]
+    if not bad:
+        return "ok", []
+
+    level = "degraded"
+    details = []
+    for x in bad[:3]:
+        service = x.get("service", "Service")
+        status = x.get("status", "unknown")
+        details.append(f"{service} — {status}")
+
+        if status.lower() in {"serviceinterruption", "serviceoutage"}:
+            level = "major"
+
+    return level, details
+
 def summarize(provider):
     kind, url = provider["kind"], provider["url"]
     if kind == "statuspage":
         return summarize_statuspage(url)
-    if kind == "slack":
-        return summarize_slack(url)
     if kind == "rss":
         return summarize_rss(url)
+    if kind == "gcp_incidents":
+        return summarize_gcp_incidents(url)
+    if kind == "m365_graph":
+        return summarize_m365_graph(url)
     return "unknown", [f"Unsupported provider kind: {kind}"]
 
 # -----------------------
 # UI controls
 # -----------------------
 severity_order = {"major": 0, "degraded": 1, "unknown": 2, "ok": 3}
+emoji = {"ok": "✅", "degraded": "🟡", "major": "🔴", "unknown": "⚪"}
 
 left, mid, right = st.columns([2, 2, 3])
 with left:
@@ -179,10 +252,10 @@ with left:
         default=["major", "degraded", "unknown", "ok"],
     )
 with mid:
-    search = st.text_input("Search providers", value="", placeholder="e.g., AWS, Azure, Slack").strip().lower()
+    search = st.text_input("Search providers", value="", placeholder="e.g., AWS, Azure, GCP").strip().lower()
 with right:
-    st.write("")  # spacing
-    st.caption("Tip: add providers in `PROVIDERS` and they’ll be polled in parallel.")
+    st.write("")
+    st.caption("Click provider names to open official status pages.")
 
 st.divider()
 
@@ -202,14 +275,11 @@ with ThreadPoolExecutor(max_workers=max_workers) as ex:
             level, details = "unknown", [f"Unhandled error: {e}"]
         results.append({**p, "level": level, "details": details})
 
-# sort so major items float to top
 results.sort(key=lambda r: (severity_order.get(r["level"], 99), r["name"].lower()))
 
 # -----------------------
-# Render cards
+# Render cards (clickable provider -> official status page)
 # -----------------------
-emoji = {"ok": "✅", "degraded": "🟡", "major": "🔴", "unknown": "⚪"}
-
 for r in results:
     if r["level"] not in show:
         continue
@@ -218,9 +288,18 @@ for r in results:
 
     c1, c2 = st.columns([2, 6])
     with c1:
-        st.subheader(f"{emoji.get(r['level'], '⚪')} {r['name']}")
+        title = r["name"]
+        link = r.get("status_page")
+
+        if link:
+            st.subheader(f"{emoji.get(r['level'], '⚪')} [{title}]({link})")
+            st.link_button("Open official status page", link)
+        else:
+            st.subheader(f"{emoji.get(r['level'], '⚪')} {title}")
+
         st.caption(f"Kind: {r['kind']}")
         st.caption("Last checked: just now")
+
     with c2:
         if r["level"] == "ok":
             st.success("Operational")
