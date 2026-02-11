@@ -37,23 +37,10 @@ PROVIDERS = [
     },
     {
         "name": "Microsoft 365",
-        "kind": "m365_graph",
-        "url": "https://graph.microsoft.com/v1.0/admin/serviceAnnouncement/healthOverviews",
+        "kind": "link_only",
+        "url": "",  # not used
         "status_page": "https://status.cloud.microsoft",
-    },
-
-    # Optional extras (keep or delete as you like)
-    {
-        "name": "Cloudflare",
-        "kind": "statuspage",
-        "url": "https://www.cloudflarestatus.com/api/v2/summary.json",
-        "status_page": "https://www.cloudflarestatus.com",
-    },
-    {
-        "name": "OpenAI",
-        "kind": "statuspage",
-        "url": "https://status.openai.com/api/v2/summary.json",
-        "status_page": "https://status.openai.com",
+        "note": "Public status page only (tenant service health API requires admin access).",
     },
 ]
 
@@ -63,55 +50,22 @@ PROVIDERS = [
 DEFAULT_TIMEOUT = 12
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_url(url: str, headers_items=None, timeout: int = DEFAULT_TIMEOUT) -> bytes:
-    """
-    Cached fetch for ALL providers. Caches raw bytes for 60s.
-    headers_items is a tuple of (key, value) pairs so Streamlit can cache it.
-    """
+def fetch_url(url: str, timeout: int = DEFAULT_TIMEOUT) -> bytes:
     headers = {
         "User-Agent": "OutageWatch/1.0 (+streamlit)",
         "Accept": "*/*",
     }
-    if headers_items:
-        for k, v in headers_items:
-            headers[k] = v
-
     r = requests.get(url, timeout=timeout, headers=headers)
     r.raise_for_status()
     return r.content
 
-def fetch_json(url: str, headers: dict | None = None):
-    headers_items = tuple(sorted(headers.items())) if headers else None
-    raw = fetch_url(url, headers_items=headers_items)
+def fetch_json(url: str):
+    raw = fetch_url(url)
     return requests.models.complexjson.loads(raw.decode("utf-8", errors="replace"))
 
 # -----------------------
 # Summarizers
 # -----------------------
-def summarize_statuspage(url):
-    try:
-        data = fetch_json(url)
-    except Exception as e:
-        return "unknown", [f"Fetch/parse error: {e}"]
-
-    status = data.get("status", {}) or {}
-    indicator = status.get("indicator", "none")
-    incidents = (data.get("incidents") or []) + (data.get("scheduled_maintenances") or [])
-
-    major = indicator in {"major", "critical"} or any((i.get("impact") in {"major", "critical"}) for i in incidents)
-    degraded = (indicator == "minor") or bool(incidents)
-
-    level = "major" if major else ("degraded" if degraded else "ok")
-
-    details = []
-    for i in incidents[:3]:
-        title = i.get("name", "Incident")
-        impact = i.get("impact", "n/a")
-        upd = i.get("updated_at") or i.get("created_at") or ""
-        details.append(f"{title} — impact: {impact} — updated: {upd}")
-
-    return level, details
-
 def _rss_level_from_title(title_lower: str) -> str:
     major_words = ["major outage", "outage", "unavailable", "down"]
     degraded_words = [
@@ -172,7 +126,6 @@ def summarize_gcp_incidents(url):
 
     active = []
     for inc in incidents:
-        # if "end" (or similar) is absent, treat as ongoing
         end = inc.get("end") or inc.get("resolved")
         if not end:
             active.append(inc)
@@ -194,65 +147,38 @@ def summarize_gcp_incidents(url):
 
     return level, details
 
-def summarize_m365_graph(url):
-    token = st.secrets.get("M365_GRAPH_TOKEN", "")
-    if not token:
-        return "unknown", ["Microsoft 365 requires Graph auth. Add M365_GRAPH_TOKEN in Streamlit Secrets."]
-
-    headers = {"Authorization": f"Bearer {token}"}
-
-    try:
-        data = fetch_json(url, headers=headers)
-    except Exception as e:
-        return "unknown", [f"Fetch/parse error (Graph): {e}"]
-
-    items = data.get("value", []) or []
-    if not items:
-        return "ok", []
-
-    bad = [x for x in items if (x.get("status") or "").lower() != "serviceoperational"]
-    if not bad:
-        return "ok", []
-
-    level = "degraded"
-    details = []
-    for x in bad[:3]:
-        service = x.get("service", "Service")
-        status = x.get("status", "unknown")
-        details.append(f"{service} — {status}")
-
-        if status.lower() in {"serviceinterruption", "serviceoutage"}:
-            level = "major"
-
-    return level, details
+def summarize_link_only(provider):
+    note = provider.get("note") or "See official status page."
+    return "info", [note]
 
 def summarize(provider):
-    kind, url = provider["kind"], provider["url"]
-    if kind == "statuspage":
-        return summarize_statuspage(url)
+    kind = provider["kind"]
+    url = provider.get("url", "")
+
     if kind == "rss":
         return summarize_rss(url)
     if kind == "gcp_incidents":
         return summarize_gcp_incidents(url)
-    if kind == "m365_graph":
-        return summarize_m365_graph(url)
+    if kind == "link_only":
+        return summarize_link_only(provider)
+
     return "unknown", [f"Unsupported provider kind: {kind}"]
 
 # -----------------------
 # UI controls
 # -----------------------
-severity_order = {"major": 0, "degraded": 1, "unknown": 2, "ok": 3}
-emoji = {"ok": "✅", "degraded": "🟡", "major": "🔴", "unknown": "⚪"}
+severity_order = {"major": 0, "degraded": 1, "unknown": 2, "info": 3, "ok": 4}
+emoji = {"ok": "✅", "degraded": "🟡", "major": "🔴", "unknown": "⚪", "info": "🔵"}
 
 left, mid, right = st.columns([2, 2, 3])
 with left:
     show = st.multiselect(
         "Show severities",
-        options=["major", "degraded", "unknown", "ok"],
-        default=["major", "degraded", "unknown", "ok"],
+        options=["major", "degraded", "unknown", "info", "ok"],
+        default=["major", "degraded", "unknown", "info", "ok"],
     )
 with mid:
-    search = st.text_input("Search providers", value="", placeholder="e.g., AWS, Azure, GCP").strip().lower()
+    search = st.text_input("Search providers", value="", placeholder="e.g., AWS, Azure, GCP, Microsoft").strip().lower()
 with right:
     st.write("")
     st.caption("Click provider names to open official status pages.")
@@ -307,6 +233,8 @@ for r in results:
             st.warning("Degraded / incident or recent issue")
         elif r["level"] == "major":
             st.error("Major outage or incident")
+        elif r["level"] == "info":
+            st.info("Check official status page")
         else:
             st.info("Unknown")
 
