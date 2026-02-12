@@ -1,7 +1,9 @@
+import re
 import requests
 import feedparser
 from html import unescape
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
@@ -13,10 +15,34 @@ st.title("Outage Watch")
 st.caption("Auto-refreshes every 60s; network responses cached for 60s.")
 st_autorefresh(interval=60_000, key="auto_refresh")
 
+DEFAULT_TIMEOUT = 12
+
 # -----------------------
-# Providers to poll
+# Crowd signals (Option A allowlist)
+# Free via RSSHub -> Outage.Report RSS
+# Route: /outagereport/:name/:count?  (example: https://rsshub.app/outagereport/ubisoft/5)
+# -----------------------
+RSSHUB_INSTANCE = "https://rsshub.app"
+RSSHUB_OUTAGEREPORT_TEMPLATE = RSSHUB_INSTANCE + "/outagereport/{slug}/{count}"
+
+CROWD_ALLOWLIST = [
+    # NOTE: Slugs must match outage.report naming style (lowercase, hyphen-separated).
+    # If any slug is wrong, you’ll just see fewer/no crowd alerts — we can tune later.
+    {"name": "American Express", "slug": "american-express", "threshold": 30, "link": "https://outage.report"},
+    {"name": "Visa",            "slug": "visa",            "threshold": 30, "link": "https://outage.report"},
+    {"name": "Mastercard",      "slug": "mastercard",      "threshold": 30, "link": "https://outage.report"},
+    {"name": "PayPal",          "slug": "paypal",          "threshold": 25, "link": "https://outage.report"},
+    {"name": "Stripe",          "slug": "stripe",          "threshold": 25, "link": "https://outage.report"},
+    {"name": "Fiserv",          "slug": "fiserv",          "threshold": 20, "link": "https://outage.report"},
+    {"name": "Worldpay",        "slug": "worldpay",        "threshold": 20, "link": "https://outage.report"},
+    {"name": "Adyen",           "slug": "adyen",           "threshold": 20, "link": "https://outage.report"},
+]
+
+# -----------------------
+# Official providers (free + official sources)
 # -----------------------
 PROVIDERS = [
+    # Cloud providers
     {
         "name": "AWS",
         "kind": "rss",
@@ -36,19 +62,83 @@ PROVIDERS = [
         "status_page": "https://status.cloud.google.com",
     },
     {
+        "name": "Google Workspace",
+        "kind": "gws_incidents_json",
+        "url": "https://www.google.com/appsstatus/dashboard/incidents.json",
+        "status_page": "https://www.google.com/appsstatus/dashboard/",
+    },
+
+    # Microsoft 365 (link-only for now)
+    {
         "name": "Microsoft 365",
         "kind": "link_only",
-        "url": "",  # not used
+        "url": "",
         "status_page": "https://status.cloud.microsoft",
         "note": "Public status page only (tenant service health API requires admin access).",
+    },
+
+    # Payments / PSPs
+    {
+        "name": "PayPal",
+        "kind": "paypal_api",
+        "url": "https://www.paypal-status.com/api/production",
+        "status_page": "https://www.paypal-status.com/product/production",
+    },
+    {
+        "name": "Stripe",
+        "kind": "stripe_json",
+        "url": "https://status.stripe.com/current/full",
+        "status_page": "https://status.stripe.com/",
+    },
+    {
+        "name": "Adyen",
+        "kind": "link_only",
+        "url": "",
+        "status_page": "https://status.adyen.com/",
+        "note": "Official status page (no simple public JSON feed wired yet).",
+    },
+
+    # Worldpay
+    {
+        "name": "Worldpay (Access Worldpay)",
+        "kind": "statuspage",
+        "url": "https://status.access.worldpay.com/api/v2/summary.json",
+        "status_page": "https://status.access.worldpay.com/",
+    },
+    {
+        "name": "Worldpay (WPG)",
+        "kind": "link_only",
+        "url": "",
+        "status_page": "https://status.wpg.worldpay.com/",
+        "note": "Official WPG status page (link-only).",
+    },
+
+    # Schemes / scheme-adjacent
+    {
+        "name": "Visa Acceptance Solutions",
+        "kind": "statuspage",
+        "url": "https://status.visaacceptance.com/api/v2/summary.json",
+        "status_page": "https://status.visaacceptance.com/",
+    },
+    {
+        "name": "Mastercard Developers API Status",
+        "kind": "link_only",
+        "url": "",
+        "status_page": "https://developer.mastercard.com/api-status",
+        "note": "Developer API status (not a global network health indicator).",
+    },
+    {
+        "name": "American Express Developers",
+        "kind": "link_only",
+        "url": "",
+        "status_page": "https://developer.americanexpress.com/",
+        "note": "Developer portal (no official public incident feed wired).",
     },
 ]
 
 # -----------------------
 # Networking (cached)
 # -----------------------
-DEFAULT_TIMEOUT = 12
-
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_url(url: str, timeout: int = DEFAULT_TIMEOUT) -> bytes:
     headers = {
@@ -59,13 +149,17 @@ def fetch_url(url: str, timeout: int = DEFAULT_TIMEOUT) -> bytes:
     r.raise_for_status()
     return r.content
 
+@st.cache_data(ttl=60, show_spinner=False)
 def fetch_json(url: str):
     raw = fetch_url(url)
     return requests.models.complexjson.loads(raw.decode("utf-8", errors="replace"))
 
 # -----------------------
-# Summarizers
+# Helpers: scoring + levels
 # -----------------------
+severity_order = {"major": 0, "degraded": 1, "unknown": 2, "info": 3, "ok": 4}
+emoji = {"ok": "✅", "degraded": "🟡", "major": "🔴", "unknown": "⚪", "info": "🔵"}
+
 def _rss_level_from_title(title_lower: str) -> str:
     major_words = ["major outage", "outage", "unavailable", "down"]
     degraded_words = [
@@ -82,6 +176,30 @@ def _rss_level_from_title(title_lower: str) -> str:
     if any(w in title_lower for w in degraded_words):
         return "degraded"
     return "ok"
+
+# -----------------------
+# Summarizers: Official sources
+# -----------------------
+def summarize_statuspage(url):
+    try:
+        data = fetch_json(url)
+    except Exception as e:
+        return "unknown", [f"Fetch error: {e}"]
+
+    indicator = (data.get("status", {}) or {}).get("indicator", "none")
+    incidents = (data.get("incidents") or []) + (data.get("scheduled_maintenances") or [])
+
+    major = indicator in {"major", "critical"} or any(i.get("impact") in {"major", "critical"} for i in incidents)
+    degraded = (indicator == "minor") or bool(incidents)
+
+    level = "major" if major else ("degraded" if degraded else "ok")
+    details = []
+    for i in incidents[:3]:
+        title = i.get("name", "Incident")
+        impact = i.get("impact", "n/a")
+        upd = i.get("updated_at") or i.get("created_at") or ""
+        details.append(f"{title} — impact: {impact} — updated: {upd}")
+    return level, details
 
 def summarize_rss(url):
     try:
@@ -147,6 +265,182 @@ def summarize_gcp_incidents(url):
 
     return level, details
 
+def summarize_google_workspace_incidents(url):
+    """
+    Uses Google Workspace dashboard incidents.json.
+    We treat incidents with no 'end' as active.
+    Status values can include SERVICE_OUTAGE (major) or SERVICE_DISRUPTION (degraded).
+    """
+    try:
+        incidents = fetch_json(url)  # array
+    except Exception as e:
+        return "unknown", [f"Fetch/parse error: {e}"]
+
+    if not incidents:
+        return "ok", []
+
+    active = [i for i in incidents if not i.get("end")]
+    if not active:
+        return "ok", []
+
+    # Determine worst active status
+    level = "degraded"
+    details = []
+    for inc in active[:3]:
+        most = inc.get("most_recent_update") or {}
+        status = (most.get("status") or "").upper()
+        begin = inc.get("begin") or ""
+        ext = (inc.get("external_desc") or "").strip().splitlines()[0] if inc.get("external_desc") else ""
+        title = "Google Workspace incident"
+
+        if status == "SERVICE_OUTAGE":
+            level = "major"
+
+        # Try to infer affected service from external desc first line
+        if ext:
+            title = ext[:120]
+
+        details.append(f"{title} — status: {status or 'n/a'} — began: {begin}")
+
+    return level, details
+
+def summarize_paypal_api(url):
+    """
+    PayPal Status Page Product API (production).
+    We treat anything not 'Operational' as degraded; widespread as major.
+    """
+    try:
+        data = fetch_json(url)
+    except Exception as e:
+        return "unknown", [f"Fetch/parse error: {e}"]
+
+    # Structure varies; do best-effort parsing.
+    systems = data.get("systems") or data.get("data") or []
+    if isinstance(systems, dict):
+        systems = systems.get("systems") or systems.get("components") or []
+
+    details = []
+    non_ok = 0
+    total = 0
+
+    def norm(s):
+        return (s or "").strip().lower()
+
+    # Common pattern on PayPal status API: nested groups -> items
+    def walk(items):
+        flat = []
+        for it in items or []:
+            if isinstance(it, dict):
+                flat.append(it)
+                children = it.get("children") or it.get("components") or it.get("items")
+                if isinstance(children, list):
+                    flat.extend(walk(children))
+        return flat
+
+    flat = walk(systems)
+    if not flat and isinstance(data, dict):
+        # fallback: treat top-level keys as components
+        flat = [data]
+
+    for c in flat:
+        name = c.get("name") or c.get("title")
+        status = c.get("status") or c.get("state")
+        if not name or not status:
+            continue
+        total += 1
+        if norm(status) not in {"operational", "available", "ok", "up"}:
+            non_ok += 1
+            details.append(f"{name} — {status}")
+
+    if total == 0:
+        # If we can't parse, link-only behavior
+        return "info", ["See official PayPal status page for details."]
+
+    if non_ok == 0:
+        return "ok", []
+    if non_ok >= max(2, total // 2):
+        return "major", details[:3]
+    return "degraded", details[:3]
+
+def summarize_stripe_json(url):
+    """
+    Stripe current/full endpoint.
+    We treat any non-'up/operational' indicator as degraded; major if any component looks major.
+    """
+    try:
+        data = fetch_json(url)
+    except Exception as e:
+        return "unknown", [f"Fetch/parse error: {e}"]
+
+    # Stripe data shape can vary; best-effort:
+    # Look for a top-level summary indicator, plus component statuses where available.
+    details = []
+    level = "ok"
+
+    def norm(s):
+        return (s or "").strip().lower()
+
+    # Try common patterns
+    summary = None
+    for key in ["status", "summary", "indicator"]:
+        if key in data:
+            summary = data.get(key)
+            break
+
+    # Components
+    components = data.get("components") or data.get("services") or []
+    if isinstance(components, dict):
+        components = components.get("components") or components.get("services") or []
+
+    major_markers = {"major_outage", "partial_outage", "outage", "down", "critical"}
+    degraded_markers = {"degraded", "degraded_performance", "partial", "warning", "investigating", "identified", "monitoring"}
+
+    # If summary exists and is string-ish
+    if isinstance(summary, str):
+        s = norm(summary)
+        if any(m in s for m in major_markers):
+            level = "major"
+        elif any(m in s for m in degraded_markers):
+            level = "degraded"
+
+    # If Stripe provides an object with indicator
+    if isinstance(summary, dict):
+        ind = norm(summary.get("indicator") or summary.get("status") or "")
+        if ind in {"major", "critical"}:
+            level = "major"
+        elif ind in {"minor", "degraded"}:
+            level = "degraded"
+
+    # Parse components if present
+    for c in (components or [])[:20]:
+        if not isinstance(c, dict):
+            continue
+        name = c.get("name") or c.get("title")
+        stt = c.get("status") or c.get("indicator") or c.get("state")
+        if not name or not stt:
+            continue
+        s = norm(stt)
+        if s in major_markers or "major" in s or "outage" in s or "down" in s:
+            level = "major"
+            details.append(f"{name} — {stt}")
+        elif s in degraded_markers or "degraded" in s or "partial" in s:
+            if level != "major":
+                level = "degraded"
+            details.append(f"{name} — {stt}")
+
+    # Incidents/messages if present
+    messages = data.get("incidents") or data.get("messages") or []
+    if isinstance(messages, list):
+        for m in messages[:3]:
+            if isinstance(m, dict):
+                title = m.get("title") or m.get("name") or m.get("message")
+                if title:
+                    details.append(str(title)[:160])
+
+    if level == "ok":
+        return "ok", []
+    return level, details[:3] if details else ["See official Stripe status page for details."]
+
 def summarize_link_only(provider):
     note = provider.get("note") or "See official status page."
     return "info", [note]
@@ -155,21 +449,85 @@ def summarize(provider):
     kind = provider["kind"]
     url = provider.get("url", "")
 
+    if kind == "statuspage":
+        return summarize_statuspage(url)
     if kind == "rss":
         return summarize_rss(url)
     if kind == "gcp_incidents":
         return summarize_gcp_incidents(url)
+    if kind == "gws_incidents_json":
+        return summarize_google_workspace_incidents(url)
+    if kind == "paypal_api":
+        return summarize_paypal_api(url)
+    if kind == "stripe_json":
+        return summarize_stripe_json(url)
     if kind == "link_only":
         return summarize_link_only(provider)
 
     return "unknown", [f"Unsupported provider kind: {kind}"]
 
 # -----------------------
+# Crowd signals logic
+# -----------------------
+def get_crowd_signals():
+    """
+    Returns a list of triggered crowd alerts.
+    Uses RSSHub's Outage.Report route to get recent entries and extract report counts.
+    """
+    triggered = []
+
+    for s in CROWD_ALLOWLIST:
+        feed_url = RSSHUB_OUTAGEREPORT_TEMPLATE.format(slug=s["slug"], count=10)
+
+        try:
+            content = fetch_url(feed_url)
+            feed = feedparser.parse(content)
+            entries = feed.entries or []
+        except Exception:
+            # Keep the app resilient if RSSHub or upstream blocks.
+            continue
+
+        if not entries:
+            continue
+
+        max_reports = None
+        best_title = None
+        best_time = None
+
+        for e in entries[:5]:
+            title = unescape(getattr(e, "title", "Update"))
+            t_lower = title.lower()
+
+            # Try common patterns: "123 reports", "reports: 123"
+            m = re.search(r"(\d+)\s+reports?", t_lower) or re.search(r"reports?\s*[:\-]\s*(\d+)", t_lower)
+            if m:
+                n = int(m.group(1))
+                if max_reports is None or n > max_reports:
+                    max_reports = n
+                    best_title = title
+                    best_time = getattr(e, "published", "") or getattr(e, "updated", "")
+            elif best_title is None:
+                best_title = title
+                best_time = getattr(e, "published", "") or getattr(e, "updated", "")
+
+        # Only trigger when we have a numeric report count AND it crosses threshold.
+        if max_reports is not None and max_reports >= s["threshold"]:
+            triggered.append({
+                "name": s["name"],
+                "reports": max_reports,
+                "threshold": s["threshold"],
+                "title": best_title or "Crowd activity",
+                "time": best_time or "",
+                "link": s.get("link", "https://outage.report"),
+                "feed_url": feed_url,
+            })
+
+    triggered.sort(key=lambda x: x["reports"], reverse=True)
+    return triggered
+
+# -----------------------
 # UI controls
 # -----------------------
-severity_order = {"major": 0, "degraded": 1, "unknown": 2, "info": 3, "ok": 4}
-emoji = {"ok": "✅", "degraded": "🟡", "major": "🔴", "unknown": "⚪", "info": "🔵"}
-
 left, mid, right = st.columns([2, 2, 3])
 with left:
     show = st.multiselect(
@@ -178,15 +536,36 @@ with left:
         default=["major", "degraded", "unknown", "info", "ok"],
     )
 with mid:
-    search = st.text_input("Search providers", value="", placeholder="e.g., AWS, Azure, GCP, Microsoft").strip().lower()
+    search = st.text_input("Search providers", value="", placeholder="e.g., AWS, PayPal, Stripe").strip().lower()
 with right:
     st.write("")
     st.caption("Click provider names to open official status pages.")
 
+# -----------------------
+# Crowd signals section (only noisy when triggered)
+# -----------------------
+st.subheader("Crowd signals")
+crowd = get_crowd_signals()
+
+if not crowd:
+    st.caption("No crowd-report spikes detected for your allowlist.")
+else:
+    for c in crowd:
+        st.error(f"🔴 {c['name']} — {c['reports']} reports (threshold: {c['threshold']})")
+        cols = st.columns([3, 2])
+        with cols[0]:
+            st.write(f"• {c['title']}")
+            if c["time"]:
+                st.write(f"• {c['time']}")
+        with cols[1]:
+            if c.get("link"):
+                st.link_button("Open Outage.Report", c["link"])
+            st.link_button("Open RSS feed", c["feed_url"])
+
 st.divider()
 
 # -----------------------
-# Poll in parallel
+# Poll official providers in parallel
 # -----------------------
 results = []
 max_workers = min(12, max(4, len(PROVIDERS)))
@@ -204,8 +583,9 @@ with ThreadPoolExecutor(max_workers=max_workers) as ex:
 results.sort(key=lambda r: (severity_order.get(r["level"], 99), r["name"].lower()))
 
 # -----------------------
-# Render cards (clickable provider -> official status page)
+# Render official status cards
 # -----------------------
+st.subheader("Official status")
 for r in results:
     if r["level"] not in show:
         continue
