@@ -80,8 +80,8 @@ PROVIDERS = [
     # Payments / PSPs
     {
         "name": "PayPal",
-        "kind": "paypal_api",
-        "url": "https://www.paypal-status.com/api/production",
+        "kind": "rss",
+        "url": "https://www.paypal-status.com/feed/rss",
         "status_page": "https://www.paypal-status.com/product/production",
     },
     {
@@ -302,60 +302,6 @@ def summarize_google_workspace_incidents(url):
 
     return level, details
 
-def summarize_paypal_api(url):
-    """
-    PayPal Status Page Product API (production).
-    We treat anything not 'Operational' as degraded; widespread as major.
-    """
-    try:
-        data = fetch_json(url)
-    except Exception as e:
-        return "unknown", [f"Fetch/parse error: {e}"]
-
-    systems = data.get("systems") or data.get("data") or []
-    if isinstance(systems, dict):
-        systems = systems.get("systems") or systems.get("components") or []
-
-    details = []
-    non_ok = 0
-    total = 0
-
-    def norm(s):
-        return (s or "").strip().lower()
-
-    def walk(items):
-        flat = []
-        for it in items or []:
-            if isinstance(it, dict):
-                flat.append(it)
-                children = it.get("children") or it.get("components") or it.get("items")
-                if isinstance(children, list):
-                    flat.extend(walk(children))
-        return flat
-
-    flat = walk(systems)
-    if not flat and isinstance(data, dict):
-        flat = [data]
-
-    for c in flat:
-        name = c.get("name") or c.get("title")
-        status = c.get("status") or c.get("state")
-        if not name or not status:
-            continue
-        total += 1
-        if norm(status) not in {"operational", "available", "ok", "up"}:
-            non_ok += 1
-            details.append(f"{name} — {status}")
-
-    if total == 0:
-        return "info", ["See official PayPal status page for details."]
-
-    if non_ok == 0:
-        return "ok", []
-    if non_ok >= max(2, total // 2):
-        return "major", details[:3]
-    return "degraded", details[:3]
-
 def summarize_stripe_json(url):
     """
     Stripe current/full endpoint.
@@ -443,8 +389,6 @@ def summarize(provider):
         return summarize_gcp_incidents(url)
     if kind == "gws_incidents_json":
         return summarize_google_workspace_incidents(url)
-    if kind == "paypal_api":
-        return summarize_paypal_api(url)
     if kind == "stripe_json":
         return summarize_stripe_json(url)
     if kind == "link_only":
