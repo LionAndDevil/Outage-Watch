@@ -3,6 +3,7 @@ import requests
 import feedparser
 from html import unescape
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
@@ -20,10 +21,15 @@ DEFAULT_TIMEOUT = 12
 # -----------------------
 # Crowd signals (Option A allowlist)
 # Free via RSSHub -> Outage.Report RSS
-# Route: /outagereport/:name/:count?  (example: https://rsshub.app/outagereport/ubisoft/5)
+# Route: /outagereport/:name/:count (example: https://rsshub.app/outagereport/visa/10)
 # -----------------------
-RSSHUB_INSTANCE = "https://rsshub.app"
-RSSHUB_OUTAGEREPORT_TEMPLATE = RSSHUB_INSTANCE + "/outagereport/{slug}/{count}"
+# (4) Resilience: fallback RSSHub instances (tries them in order)
+RSSHUB_INSTANCES = [
+    "https://rsshub.app",
+    "https://rsshub.rsshub.app",   # common alternate
+]
+
+RSSHUB_OUTAGEREPORT_PATH_TEMPLATE = "/outagereport/{slug}/{count}"
 
 CROWD_ALLOWLIST = [
     {"name": "American Express", "slug": "american-express", "threshold": 30},
@@ -98,7 +104,7 @@ PROVIDERS = [
         "note": "Attempts public Statuspage-style JSON; if blocked/JS-only, falls back to link-only.",
     },
 
-    # ✅ Keep ONLY the end-user transaction-focused Worldpay view (WPG) and rename it
+    # End-user transaction-focused Worldpay view (WPG)
     {
         "name": "Worldpay Payments Gateway (WPG)",
         "kind": "statuspage_html",
@@ -138,18 +144,23 @@ PROVIDERS = [
 # Networking (cached)
 # -----------------------
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_url(url: str, timeout: int = DEFAULT_TIMEOUT) -> bytes:
+def fetch_url_with_time(url: str, timeout: int = DEFAULT_TIMEOUT):
+    """
+    Returns (bytes, fetched_at_iso_utc). Because this is cached, fetched_at reflects
+    the time the cached value was created (i.e., 'last fetched' from the network).
+    """
     headers = {
         "User-Agent": "OutageWatch/1.0 (+streamlit)",
         "Accept": "*/*",
     }
     r = requests.get(url, timeout=timeout, headers=headers)
     r.raise_for_status()
-    return r.content
+    fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return r.content, fetched_at
 
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_json(url: str):
-    raw = fetch_url(url)
+    raw, _ = fetch_url_with_time(url)
     return requests.models.complexjson.loads(raw.decode("utf-8", errors="replace"))
 
 # -----------------------
@@ -200,11 +211,6 @@ def summarize_statuspage(url):
     return level, details
 
 def summarize_statuspage_try(base_url: str):
-    """
-    Some JS-driven status pages still expose Statuspage-style endpoints.
-    We try /api/v2/summary.json, then /api/v2/status.json.
-    If both fail, we return 'info' with a note.
-    """
     tried = []
     for endpoint in ["/api/v2/summary.json", "/api/v2/status.json"]:
         url = base_url.rstrip("/") + endpoint
@@ -229,7 +235,7 @@ def summarize_statuspage_try(base_url: str):
 
 def summarize_rss(url):
     try:
-        content = fetch_url(url)
+        content, _ = fetch_url_with_time(url)
         feed = feedparser.parse(content)
     except Exception as e:
         return "unknown", [f"Fetch/parse error: {e}"]
@@ -261,7 +267,7 @@ def summarize_rss(url):
 
 def summarize_gcp_incidents(url):
     try:
-        incidents = fetch_json(url)  # incidents.json is an array
+        incidents = fetch_json(url)  # array
     except Exception as e:
         return "unknown", [f"Fetch/parse error: {e}"]
 
@@ -392,7 +398,8 @@ def summarize_stripe_json(url):
 
 def summarize_statuspage_html(url):
     try:
-        html = fetch_url(url).decode("utf-8", errors="replace").lower()
+        html, _ = fetch_url_with_time(url)
+        html = html.decode("utf-8", errors="replace").lower()
     except Exception as e:
         return "unknown", [f"Fetch error: {e}"]
 
@@ -418,7 +425,8 @@ def summarize_statuspage_html(url):
 
 def summarize_mastercard_dev_html(url):
     try:
-        html = fetch_url(url).decode("utf-8", errors="replace")
+        html, _ = fetch_url_with_time(url)
+        html = html.decode("utf-8", errors="replace")
     except Exception as e:
         return "unknown", [f"Fetch error: {e}"]
 
@@ -468,18 +476,49 @@ def summarize(provider):
 # -----------------------
 # Crowd signals logic
 # -----------------------
-def get_crowd_signals():
-    triggered = []
+def build_outagereport_feed_url(instance: str, slug: str, count: int) -> str:
+    return instance.rstrip("/") + RSSHUB_OUTAGEREPORT_PATH_TEMPLATE.format(slug=slug, count=count)
 
-    for s in CROWD_ALLOWLIST:
-        feed_url = RSSHUB_OUTAGEREPORT_TEMPLATE.format(slug=s["slug"], count=10)
-
+def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
+    """
+    (4) Resilience: Try multiple RSSHub instances. Return the first that works.
+    Returns: (feed_url, entries, fetched_at, instance_used, error)
+    """
+    last_err = None
+    for inst in RSSHUB_INSTANCES:
+        url = build_outagereport_feed_url(inst, slug, count)
         try:
-            content = fetch_url(feed_url)
+            content, fetched_at = fetch_url_with_time(url)
             feed = feedparser.parse(content)
             entries = feed.entries or []
-        except Exception:
+            return url, entries, fetched_at, inst, None
+        except Exception as e:
+            last_err = e
             continue
+    return None, [], None, None, last_err
+
+def get_crowd_signals():
+    """
+    Returns:
+      triggered: list of alerts
+      checks: list of per-service feed check metadata (5) transparency: last fetched time + feed url
+    """
+    triggered = []
+    checks = []
+
+    for s in CROWD_ALLOWLIST:
+        feed_url, entries, fetched_at, inst_used, err = fetch_crowd_feed_with_fallback(s["slug"], count=10)
+
+        checks.append({
+            "name": s["name"],
+            "slug": s["slug"],
+            "threshold": s["threshold"],
+            "feed_url": feed_url,
+            "fetched_at": fetched_at,
+            "instance": inst_used,
+            "ok": err is None,
+            "error": str(err) if err else "",
+        })
 
         if not entries:
             continue
@@ -510,12 +549,14 @@ def get_crowd_signals():
                 "threshold": s["threshold"],
                 "title": best_title or "Crowd activity",
                 "time": best_time or "",
-                "link": f"https://outage.report/{s['slug']}",
-                "feed_url": feed_url,
+                "source_link": f"https://outage.report/{s['slug']}",
+                "feed_url": feed_url or "",
+                "fetched_at": fetched_at or "",
+                "instance": inst_used or "",
             })
 
     triggered.sort(key=lambda x: x["reports"], reverse=True)
-    return triggered
+    return triggered, checks
 
 # -----------------------
 # UI controls
@@ -534,13 +575,32 @@ with right:
     st.caption("Click provider names to open official status pages.")
 
 # -----------------------
-# Crowd signals section (list monitored services + thresholds)
+# Crowd signals section (4 + 5 added)
 # -----------------------
 st.subheader("Crowd signals")
 monitoring = ", ".join([f"{s['name']} (≥{s['threshold']})" for s in CROWD_ALLOWLIST])
 st.caption(f"Monitoring: {monitoring}")
 
-crowd = get_crowd_signals()
+crowd, crowd_checks = get_crowd_signals()
+
+# (5) Transparency: show which RSSHub instance is being used + last fetched times
+with st.expander("Crowd feed checks (sources & last fetched)", expanded=False):
+    st.caption(
+        "Each service is pulled from Outage.Report via RSSHub. "
+        "The app tries multiple RSSHub instances for resilience and uses the first one that responds."
+    )
+    for chk in crowd_checks:
+        status_icon = "✅" if chk["ok"] else "⚠️"
+        line = f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}"
+        if chk["fetched_at"]:
+            line += f" — last fetched: {chk['fetched_at']}"
+        if chk["instance"]:
+            line += f" — via: {chk['instance']}"
+        st.write(line)
+        if chk["feed_url"]:
+            st.link_button("Open RSS feed", chk["feed_url"], key=f"feed_{chk['slug']}")
+        if chk["error"]:
+            st.caption(f"Error: {chk['error']}")
 
 if not crowd:
     st.caption("No crowd-report spikes detected for your allowlist.")
@@ -552,9 +612,12 @@ else:
             st.write(f"• {c['title']}")
             if c["time"]:
                 st.write(f"• {c['time']}")
+            if c["fetched_at"]:
+                st.write(f"• Last fetched: {c['fetched_at']} (via {c['instance']})")
         with cols[1]:
-            st.link_button("Open crowd-signal source", c["link"])
-            st.link_button("Open RSS feed", c["feed_url"])
+            st.link_button("Open crowd-signal source", c["source_link"], key=f"src_{c['name']}")
+            if c["feed_url"]:
+                st.link_button("Open RSS feed", c["feed_url"], key=f"rss_{c['name']}")
 
 st.divider()
 
