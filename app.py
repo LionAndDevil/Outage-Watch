@@ -28,14 +28,14 @@ RSSHUB_OUTAGEREPORT_TEMPLATE = RSSHUB_INSTANCE + "/outagereport/{slug}/{count}"
 CROWD_ALLOWLIST = [
     # NOTE: Slugs must match outage.report naming style (lowercase, hyphen-separated).
     # If any slug is wrong, you’ll just see fewer/no crowd alerts — we can tune later.
-    {"name": "American Express", "slug": "american-express", "threshold": 30, "link": "https://outage.report"},
-    {"name": "Visa",            "slug": "visa",            "threshold": 30, "link": "https://outage.report"},
-    {"name": "Mastercard",      "slug": "mastercard",      "threshold": 30, "link": "https://outage.report"},
-    {"name": "PayPal",          "slug": "paypal",          "threshold": 25, "link": "https://outage.report"},
-    {"name": "Stripe",          "slug": "stripe",          "threshold": 25, "link": "https://outage.report"},
-    {"name": "Fiserv",          "slug": "fiserv",          "threshold": 20, "link": "https://outage.report"},
-    {"name": "Worldpay",        "slug": "worldpay",        "threshold": 20, "link": "https://outage.report"},
-    {"name": "Adyen",           "slug": "adyen",           "threshold": 20, "link": "https://outage.report"},
+    {"name": "American Express", "slug": "american-express", "threshold": 30},
+    {"name": "Visa",            "slug": "visa",            "threshold": 30},
+    {"name": "Mastercard",      "slug": "mastercard",      "threshold": 30},
+    {"name": "PayPal",          "slug": "paypal",          "threshold": 25},
+    {"name": "Stripe",          "slug": "stripe",          "threshold": 25},
+    {"name": "Fiserv",          "slug": "fiserv",          "threshold": 20},
+    {"name": "Worldpay",        "slug": "worldpay",        "threshold": 20},
+    {"name": "Adyen",           "slug": "adyen",           "threshold": 20},
 ]
 
 # -----------------------
@@ -497,7 +497,7 @@ def get_crowd_signals():
                 "threshold": s["threshold"],
                 "title": best_title or "Crowd activity",
                 "time": best_time or "",
-                "link": s.get("link", "https://outage.report"),
+                "link": f"https://outage.report/{s['slug']}",
                 "feed_url": feed_url,
             })
 
@@ -540,8 +540,7 @@ else:
             if c["time"]:
                 st.write(f"• {c['time']}")
         with cols[1]:
-            if c.get("link"):
-                st.link_button("Open Outage.Report", c["link"])
+            st.link_button("Open crowd-signal source", c["link"])
             st.link_button("Open RSS feed", c["feed_url"])
 
 st.divider()
