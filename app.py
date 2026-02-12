@@ -26,8 +26,6 @@ RSSHUB_INSTANCE = "https://rsshub.app"
 RSSHUB_OUTAGEREPORT_TEMPLATE = RSSHUB_INSTANCE + "/outagereport/{slug}/{count}"
 
 CROWD_ALLOWLIST = [
-    # NOTE: Slugs must match outage.report naming style (lowercase, hyphen-separated).
-    # If any slug is wrong, you’ll just see fewer/no crowd alerts — we can tune later.
     {"name": "American Express", "slug": "american-express", "threshold": 30},
     {"name": "Visa",            "slug": "visa",            "threshold": 30},
     {"name": "Mastercard",      "slug": "mastercard",      "threshold": 30},
@@ -90,12 +88,14 @@ PROVIDERS = [
         "url": "https://status.stripe.com/current/full",
         "status_page": "https://status.stripe.com/",
     },
+
+    # ✅ TRY FIX: Adyen (attempt Statuspage-style endpoints, then fallback)
     {
         "name": "Adyen",
-        "kind": "link_only",
-        "url": "",
+        "kind": "statuspage_try",
+        "url": "https://status.adyen.com",
         "status_page": "https://status.adyen.com/",
-        "note": "Official status page (no simple public JSON feed wired yet).",
+        "note": "Attempts public Statuspage-style JSON; if blocked/JS-only, falls back to link-only.",
     },
 
     # Worldpay
@@ -105,12 +105,13 @@ PROVIDERS = [
         "url": "https://status.access.worldpay.com/api/v2/summary.json",
         "status_page": "https://status.access.worldpay.com/",
     },
+    # ✅ FIX: WPG now auto-classifies using HTML keywords
     {
         "name": "Worldpay (WPG)",
-        "kind": "link_only",
-        "url": "",
+        "kind": "statuspage_html",
+        "url": "https://status.wpg.worldpay.com/",
         "status_page": "https://status.wpg.worldpay.com/",
-        "note": "Official WPG status page (link-only).",
+        "note": "Parsed from the public status page HTML.",
     },
 
     # Schemes / scheme-adjacent
@@ -120,19 +121,23 @@ PROVIDERS = [
         "url": "https://status.visaacceptance.com/api/v2/summary.json",
         "status_page": "https://status.visaacceptance.com/",
     },
+
+    # ✅ TRY FIX: Mastercard Developers API Status (HTML keyword parsing)
     {
         "name": "Mastercard Developers API Status",
-        "kind": "link_only",
-        "url": "",
+        "kind": "mastercard_dev_html",
+        "url": "https://developer.mastercard.com/api-status",
         "status_page": "https://developer.mastercard.com/api-status",
-        "note": "Developer API status (not a global network health indicator).",
+        "note": "Attempts to classify by parsing the public page text; may be JS-driven and not parseable.",
     },
+
+    # Amex Developers (still link-only; no reliable public incident feed)
     {
         "name": "American Express Developers",
         "kind": "link_only",
         "url": "",
         "status_page": "https://developer.americanexpress.com/",
-        "note": "Developer portal (no official public incident feed wired).",
+        "note": "No public status RSS/JSON endpoint found; link-only.",
     },
 ]
 
@@ -200,6 +205,36 @@ def summarize_statuspage(url):
         upd = i.get("updated_at") or i.get("created_at") or ""
         details.append(f"{title} — impact: {impact} — updated: {upd}")
     return level, details
+
+def summarize_statuspage_try(base_url: str):
+    """
+    Some JS-driven status pages still expose Statuspage-style endpoints.
+    We try /api/v2/summary.json, then /api/v2/status.json.
+    If both fail, we return 'info' with a note.
+    """
+    tried = []
+    for endpoint in ["/api/v2/summary.json", "/api/v2/status.json"]:
+        url = base_url.rstrip("/") + endpoint
+        tried.append(endpoint)
+        try:
+            data = fetch_json(url)
+        except Exception:
+            continue
+
+        # If this looks like Statuspage's shape, we can classify.
+        status_obj = data.get("status") if isinstance(data, dict) else None
+        if isinstance(status_obj, dict):
+            indicator = (status_obj.get("indicator") or "none").lower()
+            if indicator in {"major", "critical"}:
+                return "major", [f"Status indicator: {indicator}"]
+            if indicator in {"minor"}:
+                return "degraded", [f"Status indicator: {indicator}"]
+            return "ok", []
+
+        # Fallback: if it doesn't match, still treat as info.
+        return "info", ["Fetched JSON but format was unexpected; see official status page."]
+
+    return "info", [f"No public JSON endpoints responded ({', '.join(tried)})."]
 
 def summarize_rss(url):
     try:
@@ -345,7 +380,7 @@ def summarize_stripe_json(url):
         elif ind in {"minor", "degraded"}:
             level = "degraded"
 
-    for c in (components or [])[:20]:
+    for c in (components or [])[:40]:
         if not isinstance(c, dict):
             continue
         name = c.get("name") or c.get("title")
@@ -373,6 +408,62 @@ def summarize_stripe_json(url):
         return "ok", []
     return level, details[:3] if details else ["See official Stripe status page for details."]
 
+def summarize_statuspage_html(url):
+    """
+    For public status pages that render server-side HTML (not JS-only),
+    we classify based on keywords in the HTML.
+    """
+    try:
+        html = fetch_url(url).decode("utf-8", errors="replace").lower()
+    except Exception as e:
+        return "unknown", [f"Fetch error: {e}"]
+
+    top = html.split("past incidents", 1)[0]
+
+    if "major outage" in top or "partial outage" in top:
+        level = "major"
+    elif any(k in top for k in ["degraded performance", "investigating", "identified", "monitoring"]):
+        level = "degraded"
+    elif "all systems operational" in top or "all services are operational" in top:
+        level = "ok"
+    else:
+        level = "unknown"
+
+    details = []
+    if "scheduled maintenance" in top:
+        details.append("Scheduled maintenance listed on status page.")
+    if level in {"degraded", "major"}:
+        m = re.search(r"(investigating|identified|monitoring)[^<\n]{0,220}", html, re.IGNORECASE)
+        if m:
+            details.insert(0, m.group(0).strip())
+    return level, details[:3]
+
+def summarize_mastercard_dev_html(url):
+    """
+    Mastercard Developers API status page is often JS-driven, but sometimes the HTML contains
+    enough status text to classify. We look for key words that appear on the page UI:
+    Healthy / Partially Degraded / Unreachable / Not available.
+    """
+    try:
+        html = fetch_url(url).decode("utf-8", errors="replace")
+    except Exception as e:
+        return "unknown", [f"Fetch error: {e}"]
+
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip().lower()
+
+    # If the page is fully JS-only, text may be very thin.
+    if len(text) < 200:
+        return "info", ["Status page is likely JS-driven; unable to extract status text reliably."]
+
+    if "unreachable" in text or "not available" in text:
+        return "major", ["One or more services reported as Unreachable/Not available (page text)."]
+    if "partially degraded" in text or "degraded" in text:
+        return "degraded", ["One or more services reported as Partially Degraded (page text)."]
+    if "healthy" in text:
+        return "ok", []
+
+    return "info", ["Unable to classify from page text; see official status page."]
+
 def summarize_link_only(provider):
     note = provider.get("note") or "See official status page."
     return "info", [note]
@@ -383,6 +474,8 @@ def summarize(provider):
 
     if kind == "statuspage":
         return summarize_statuspage(url)
+    if kind == "statuspage_try":
+        return summarize_statuspage_try(url)
     if kind == "rss":
         return summarize_rss(url)
     if kind == "gcp_incidents":
@@ -391,6 +484,10 @@ def summarize(provider):
         return summarize_google_workspace_incidents(url)
     if kind == "stripe_json":
         return summarize_stripe_json(url)
+    if kind == "statuspage_html":
+        return summarize_statuspage_html(url)
+    if kind == "mastercard_dev_html":
+        return summarize_mastercard_dev_html(url)
     if kind == "link_only":
         return summarize_link_only(provider)
 
