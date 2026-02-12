@@ -89,7 +89,7 @@ PROVIDERS = [
         "status_page": "https://status.stripe.com/",
     },
 
-    # ✅ TRY FIX: Adyen (attempt Statuspage-style endpoints, then fallback)
+    # TRY: Adyen (attempt Statuspage-style endpoints, then fallback)
     {
         "name": "Adyen",
         "kind": "statuspage_try",
@@ -98,20 +98,13 @@ PROVIDERS = [
         "note": "Attempts public Statuspage-style JSON; if blocked/JS-only, falls back to link-only.",
     },
 
-    # Worldpay
+    # ✅ Keep ONLY the end-user transaction-focused Worldpay view (WPG) and rename it
     {
-        "name": "Worldpay (Access Worldpay)",
-        "kind": "statuspage",
-        "url": "https://status.access.worldpay.com/api/v2/summary.json",
-        "status_page": "https://status.access.worldpay.com/",
-    },
-    # ✅ FIX: WPG now auto-classifies using HTML keywords
-    {
-        "name": "Worldpay (WPG)",
+        "name": "Worldpay Payments Gateway (WPG)",
         "kind": "statuspage_html",
         "url": "https://status.wpg.worldpay.com/",
         "status_page": "https://status.wpg.worldpay.com/",
-        "note": "Parsed from the public status page HTML.",
+        "note": "Parsed from the public WPG status page HTML.",
     },
 
     # Schemes / scheme-adjacent
@@ -122,7 +115,7 @@ PROVIDERS = [
         "status_page": "https://status.visaacceptance.com/",
     },
 
-    # ✅ TRY FIX: Mastercard Developers API Status (HTML keyword parsing)
+    # TRY: Mastercard Developers API Status (HTML keyword parsing)
     {
         "name": "Mastercard Developers API Status",
         "kind": "mastercard_dev_html",
@@ -221,7 +214,6 @@ def summarize_statuspage_try(base_url: str):
         except Exception:
             continue
 
-        # If this looks like Statuspage's shape, we can classify.
         status_obj = data.get("status") if isinstance(data, dict) else None
         if isinstance(status_obj, dict):
             indicator = (status_obj.get("indicator") or "none").lower()
@@ -231,7 +223,6 @@ def summarize_statuspage_try(base_url: str):
                 return "degraded", [f"Status indicator: {indicator}"]
             return "ok", []
 
-        # Fallback: if it doesn't match, still treat as info.
         return "info", ["Fetched JSON but format was unexpected; see official status page."]
 
     return "info", [f"No public JSON endpoints responded ({', '.join(tried)})."]
@@ -301,11 +292,6 @@ def summarize_gcp_incidents(url):
     return level, details
 
 def summarize_google_workspace_incidents(url):
-    """
-    Uses Google Workspace dashboard incidents.json.
-    We treat incidents with no 'end' as active.
-    Status values can include SERVICE_OUTAGE (major) or SERVICE_DISRUPTION (degraded).
-    """
     try:
         incidents = fetch_json(url)  # array
     except Exception as e:
@@ -338,10 +324,6 @@ def summarize_google_workspace_incidents(url):
     return level, details
 
 def summarize_stripe_json(url):
-    """
-    Stripe current/full endpoint.
-    Best-effort parsing to detect degraded/major signals.
-    """
     try:
         data = fetch_json(url)
     except Exception as e:
@@ -409,10 +391,6 @@ def summarize_stripe_json(url):
     return level, details[:3] if details else ["See official Stripe status page for details."]
 
 def summarize_statuspage_html(url):
-    """
-    For public status pages that render server-side HTML (not JS-only),
-    we classify based on keywords in the HTML.
-    """
     try:
         html = fetch_url(url).decode("utf-8", errors="replace").lower()
     except Exception as e:
@@ -439,11 +417,6 @@ def summarize_statuspage_html(url):
     return level, details[:3]
 
 def summarize_mastercard_dev_html(url):
-    """
-    Mastercard Developers API status page is often JS-driven, but sometimes the HTML contains
-    enough status text to classify. We look for key words that appear on the page UI:
-    Healthy / Partially Degraded / Unreachable / Not available.
-    """
     try:
         html = fetch_url(url).decode("utf-8", errors="replace")
     except Exception as e:
@@ -451,7 +424,6 @@ def summarize_mastercard_dev_html(url):
 
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip().lower()
 
-    # If the page is fully JS-only, text may be very thin.
     if len(text) < 200:
         return "info", ["Status page is likely JS-driven; unable to extract status text reliably."]
 
