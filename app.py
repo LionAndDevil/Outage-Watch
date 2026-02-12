@@ -21,17 +21,29 @@ DEFAULT_TIMEOUT = 12
 # -----------------------
 # Crowd signals (Option A allowlist)
 # Free via RSSHub -> Outage.Report RSS
-# Route: /outagereport/:name/:count (example: https://rsshub.app/outagereport/visa/10)
+# Route: /outagereport/:slug/:count (slug can include country paths like us/verizon)
 # -----------------------
-# (4) Resilience: fallback RSSHub instances (tries them in order)
+# Resilience: fallback RSSHub instances (tries them in order)
 RSSHUB_INSTANCES = [
     "https://rsshub.app",
-    "https://rsshub.rsshub.app",   # common alternate
+    "https://rsshub.rsshub.app",
 ]
-
 RSSHUB_OUTAGEREPORT_PATH_TEMPLATE = "/outagereport/{slug}/{count}"
 
+def _telco_threshold(name: str) -> int:
+    """
+    Starter thresholds for telecoms.
+    Adjust later based on noise (higher = fewer alerts).
+    """
+    n = name.lower()
+    if any(x in n for x in ["verizon", "t-mobile", "at&t", "o2", "ee", "bt", "vodafone uk", "virgin media"]):
+        return 35
+    return 30
+
+# NOTE: For best reliability, use country/path slugs where known (e.g., us/verizon, gb/bt).
+# For the rest, we add best-effort slugs. If a slug is wrong, Crowd feed checks will show ⚠️.
 CROWD_ALLOWLIST = [
+    # Payments allowlist (existing)
     {"name": "American Express", "slug": "american-express", "threshold": 30},
     {"name": "Visa",            "slug": "visa",            "threshold": 30},
     {"name": "Mastercard",      "slug": "mastercard",      "threshold": 30},
@@ -40,6 +52,33 @@ CROWD_ALLOWLIST = [
     {"name": "Fiserv",          "slug": "fiserv",          "threshold": 20},
     {"name": "Worldpay",        "slug": "worldpay",        "threshold": 20},
     {"name": "Adyen",           "slug": "adyen",           "threshold": 20},
+
+    # Telecoms — confirmed/strong candidates with explicit country slugs
+    {"name": "Verizon",         "slug": "us/verizon",       "threshold": _telco_threshold("Verizon")},
+    {"name": "T-Mobile US",     "slug": "us/t-mobile",      "threshold": _telco_threshold("T-Mobile US")},
+    {"name": "AT&T",            "slug": "us/att",           "threshold": _telco_threshold("AT&T")},
+
+    {"name": "Vodafone UK",     "slug": "gb/vodafone",      "threshold": _telco_threshold("Vodafone UK")},
+    {"name": "BT (UK)",         "slug": "gb/bt",            "threshold": _telco_threshold("BT (UK)")},
+    {"name": "EE (UK)",         "slug": "gb/ee",            "threshold": _telco_threshold("EE (UK)")},
+    {"name": "Virgin Media (UK)","slug": "gb/virgin-media", "threshold": _telco_threshold("Virgin Media (UK)")},
+
+    # Telecoms — best-effort trial slugs (validate via Crowd feed checks)
+    {"name": "China Mobile",     "slug": "china-mobile",     "threshold": _telco_threshold("China Mobile")},
+    {"name": "Bharti Airtel",    "slug": "bharti-airtel",    "threshold": _telco_threshold("Bharti Airtel")},
+    {"name": "Reliance Jio",     "slug": "reliance-jio",     "threshold": _telco_threshold("Reliance Jio")},
+    {"name": "China Telecom",    "slug": "china-telecom",    "threshold": _telco_threshold("China Telecom")},
+    {"name": "China Unicom",     "slug": "china-unicom",     "threshold": _telco_threshold("China Unicom")},
+    {"name": "América Móvil",    "slug": "america-movil",    "threshold": _telco_threshold("America Movil")},
+    {"name": "Vodafone Group",   "slug": "vodafone",         "threshold": _telco_threshold("Vodafone")},
+    {"name": "Orange",           "slug": "orange",           "threshold": _telco_threshold("Orange")},
+    {"name": "Telefónica",       "slug": "telefonica",       "threshold": _telco_threshold("Telefonica")},
+    {"name": "MTN Group",        "slug": "mtn",              "threshold": _telco_threshold("MTN")},
+    {"name": "Deutsche Telekom", "slug": "deutsche-telekom", "threshold": _telco_threshold("Deutsche Telekom")},
+    {"name": "Iliad Group",      "slug": "iliad",            "threshold": _telco_threshold("Iliad")},
+    {"name": "TIM (Telecom Italia)","slug": "tim",           "threshold": _telco_threshold("TIM")},
+    {"name": "Swisscom",         "slug": "swisscom",         "threshold": _telco_threshold("Swisscom")},
+    {"name": "Telia Company",    "slug": "telia",            "threshold": _telco_threshold("Telia")},
 ]
 
 # -----------------------
@@ -477,11 +516,11 @@ def summarize(provider):
 # Crowd signals logic
 # -----------------------
 def build_outagereport_feed_url(instance: str, slug: str, count: int) -> str:
-    return instance.rstrip("/") + RSSHUB_OUTAGEREPORT_PATH_TEMPLATE.format(slug=slug, count=count)
+    return instance.rstrip("/") + RSSHUB_OUTAGEREPORT_PATH_TEMPLATE.format(slug=slug.strip("/"), count=count)
 
 def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
     """
-    (4) Resilience: Try multiple RSSHub instances. Return the first that works.
+    Try multiple RSSHub instances. Return the first that works.
     Returns: (feed_url, entries, fetched_at, instance_used, error)
     """
     last_err = None
@@ -501,7 +540,7 @@ def get_crowd_signals():
     """
     Returns:
       triggered: list of alerts
-      checks: list of per-service feed check metadata (5) transparency: last fetched time + feed url
+      checks: list of per-service feed check metadata (transparency: last fetched time + feed url)
     """
     triggered = []
     checks = []
@@ -549,7 +588,7 @@ def get_crowd_signals():
                 "threshold": s["threshold"],
                 "title": best_title or "Crowd activity",
                 "time": best_time or "",
-                "source_link": f"https://outage.report/{s['slug']}",
+                "source_link": f"https://outage.report/{s['slug'].strip('/')}",
                 "feed_url": feed_url or "",
                 "fetched_at": fetched_at or "",
                 "instance": inst_used or "",
@@ -569,13 +608,13 @@ with left:
         default=["major", "degraded", "unknown", "info", "ok"],
     )
 with mid:
-    search = st.text_input("Search providers", value="", placeholder="e.g., AWS, PayPal, Stripe").strip().lower()
+    search = st.text_input("Search providers", value="", placeholder="e.g., AWS, PayPal, Verizon").strip().lower()
 with right:
     st.write("")
     st.caption("Click provider names to open official status pages.")
 
 # -----------------------
-# Crowd signals section (4 + 5 added)
+# Crowd signals section
 # -----------------------
 st.subheader("Crowd signals")
 monitoring = ", ".join([f"{s['name']} (≥{s['threshold']})" for s in CROWD_ALLOWLIST])
@@ -583,7 +622,6 @@ st.caption(f"Monitoring: {monitoring}")
 
 crowd, crowd_checks = get_crowd_signals()
 
-# (5) Transparency: show which RSSHub instance is being used + last fetched times
 with st.expander("Crowd feed checks (sources & last fetched)", expanded=False):
     st.caption(
         "Each service is pulled from Outage.Report via RSSHub. "
