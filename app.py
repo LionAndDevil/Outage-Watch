@@ -579,39 +579,16 @@ st.subheader("Crowd signals")
 monitoring = ", ".join([f"{s['name']} (≥{s['threshold']})" for s in CROWD_ALLOWLIST])
 st.caption(f"Monitoring: {monitoring}")
 
-crowd, crowd_checks = get_crowd_signals()
+# TEMPORARY DEBUG: disable crowd fetching so the page cannot get stuck here.
+# If Official status appears again, the crowd fetch loop is blocking rendering.
+crowd, crowd_checks = [], []
 
 with st.expander("Crowd feed checks (sources & last fetched)", expanded=False):
-    st.caption("Each service is pulled from Outage.Report via RSSHub; the app tries multiple public instances.")
-    for chk in crowd_checks:
-        status_icon = "✅" if chk["ok"] else "⚠️"
-        line = f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}"
-        if chk["fetched_at"]:
-            line += f" — last fetched: {chk['fetched_at']}"
-        if chk["instance"]:
-            line += f" — via: {chk['instance']}"
-        st.write(line)
-        if chk["feed_url"]:
-            st.link_button("Open RSS feed", chk["feed_url"], key=f"feed_{chk['slug']}")
-        if chk["error"]:
-            st.caption(f"Error: {chk['error']}")
+    st.caption("Crowd signals temporarily disabled for debugging.")
+    st.write("This is a test to confirm Official status cards render correctly without crowd fetching.")
 
 if not crowd:
-    st.caption("No crowd-report spikes detected for your allowlist.")
-else:
-    for c in crowd:
-        st.error(f"🔴 {c['name']} — {c['reports']} reports (threshold: {c['threshold']})")
-        cols = st.columns([3, 2])
-        with cols[0]:
-            st.write(f"• {c['title']}")
-            if c["time"]:
-                st.write(f"• {c['time']}")
-            if c["fetched_at"]:
-                st.write(f"• Last fetched: {c['fetched_at']} (via {c['instance']})")
-        with cols[1]:
-            st.link_button("Open crowd-signal source", c["source_link"], key=f"src_{c['name']}")
-            if c["feed_url"]:
-                st.link_button("Open RSS feed", c["feed_url"], key=f"rss_{c['name']}")
+    st.caption("No crowd-report spikes detected for your allowlist (crowd disabled for test).")
 
 st.divider()
 
@@ -670,7 +647,7 @@ for r in results:
             st.info("Unknown")
 
         if r["details"]:
-            with st.expander("Details", expanded=(r["level"] != "ok")) as _:
+            with st.expander("Details", expanded=(r["level"] != "ok")):
                 for d in r["details"]:
                     st.write("• " + d)
 
