@@ -42,7 +42,6 @@ RSSHUB_INSTANCES = [
     "https://hub.rss.direct",
     "https://rsshub.umzzz.com",
 ]
-
 RSSHUB_OUTAGEREPORT_PATH_TEMPLATE = "/outagereport/{slug}/{count}"
 
 def _telco_threshold(name: str) -> int:
@@ -66,30 +65,30 @@ CROWD_ALLOWLIST = [
     {"name": "Adyen",           "slug": "adyen",            "threshold": 20},
 
     # Telecoms (US + UK country-path slugs where known)
-    {"name": "Verizon",           "slug": "us/verizon",       "threshold": _telco_threshold("Verizon")},
-    {"name": "T-Mobile US",       "slug": "us/t-mobile",      "threshold": _telco_threshold("T-Mobile US")},
-    {"name": "AT&T",              "slug": "us/att",           "threshold": _telco_threshold("AT&T")},
-    {"name": "Vodafone UK",       "slug": "gb/vodafone",      "threshold": _telco_threshold("Vodafone UK")},
-    {"name": "BT (UK)",           "slug": "gb/bt",            "threshold": _telco_threshold("BT (UK)")},
-    {"name": "EE (UK)",           "slug": "gb/ee",            "threshold": _telco_threshold("EE (UK)")},
-    {"name": "Virgin Media (UK)", "slug": "gb/virgin-media",  "threshold": _telco_threshold("Virgin Media (UK)")},
+    {"name": "Verizon",            "slug": "us/verizon",      "threshold": _telco_threshold("Verizon")},
+    {"name": "T-Mobile US",        "slug": "us/t-mobile",     "threshold": _telco_threshold("T-Mobile US")},
+    {"name": "AT&T",               "slug": "us/att",          "threshold": _telco_threshold("AT&T")},
+    {"name": "Vodafone UK",        "slug": "gb/vodafone",     "threshold": _telco_threshold("Vodafone UK")},
+    {"name": "BT (UK)",            "slug": "gb/bt",           "threshold": _telco_threshold("BT (UK)")},
+    {"name": "EE (UK)",            "slug": "gb/ee",           "threshold": _telco_threshold("EE (UK)")},
+    {"name": "Virgin Media (UK)",  "slug": "gb/virgin-media", "threshold": _telco_threshold("Virgin Media (UK)")},
 
     # Telecoms (trial slugs; validate via Crowd feed checks)
-    {"name": "China Mobile",      "slug": "china-mobile",      "threshold": _telco_threshold("China Mobile")},
-    {"name": "Bharti Airtel",     "slug": "bharti-airtel",     "threshold": _telco_threshold("Bharti Airtel")},
-    {"name": "Reliance Jio",      "slug": "reliance-jio",      "threshold": _telco_threshold("Reliance Jio")},
-    {"name": "China Telecom",     "slug": "china-telecom",     "threshold": _telco_threshold("China Telecom")},
-    {"name": "China Unicom",      "slug": "china-unicom",      "threshold": _telco_threshold("China Unicom")},
-    {"name": "América Móvil",     "slug": "america-movil",     "threshold": _telco_threshold("America Movil")},
-    {"name": "Vodafone Group",    "slug": "vodafone",          "threshold": _telco_threshold("Vodafone")},
-    {"name": "Orange",            "slug": "orange",            "threshold": _telco_threshold("Orange")},
-    {"name": "Telefónica",        "slug": "telefonica",        "threshold": _telco_threshold("Telefonica")},
-    {"name": "MTN Group",         "slug": "mtn",               "threshold": _telco_threshold("MTN")},
-    {"name": "Deutsche Telekom",  "slug": "deutsche-telekom",  "threshold": _telco_threshold("Deutsche Telekom")},
-    {"name": "Iliad Group",       "slug": "iliad",             "threshold": _telco_threshold("Iliad")},
-    {"name": "TIM (Telecom Italia)", "slug": "tim",            "threshold": _telco_threshold("TIM")},
-    {"name": "Swisscom",          "slug": "swisscom",          "threshold": _telco_threshold("Swisscom")},
-    {"name": "Telia Company",     "slug": "telia",             "threshold": _telco_threshold("Telia")},
+    {"name": "China Mobile",        "slug": "china-mobile",      "threshold": _telco_threshold("China Mobile")},
+    {"name": "Bharti Airtel",       "slug": "bharti-airtel",     "threshold": _telco_threshold("Bharti Airtel")},
+    {"name": "Reliance Jio",        "slug": "reliance-jio",      "threshold": _telco_threshold("Reliance Jio")},
+    {"name": "China Telecom",       "slug": "china-telecom",     "threshold": _telco_threshold("China Telecom")},
+    {"name": "China Unicom",        "slug": "china-unicom",      "threshold": _telco_threshold("China Unicom")},
+    {"name": "América Móvil",       "slug": "america-movil",     "threshold": _telco_threshold("America Movil")},
+    {"name": "Vodafone Group",      "slug": "vodafone",          "threshold": _telco_threshold("Vodafone")},
+    {"name": "Orange",              "slug": "orange",            "threshold": _telco_threshold("Orange")},
+    {"name": "Telefónica",          "slug": "telefonica",        "threshold": _telco_threshold("Telefonica")},
+    {"name": "MTN Group",           "slug": "mtn",               "threshold": _telco_threshold("MTN")},
+    {"name": "Deutsche Telekom",    "slug": "deutsche-telekom",  "threshold": _telco_threshold("Deutsche Telekom")},
+    {"name": "Iliad Group",         "slug": "iliad",             "threshold": _telco_threshold("Iliad")},
+    {"name": "TIM (Telecom Italia)","slug": "tim",               "threshold": _telco_threshold("TIM")},
+    {"name": "Swisscom",            "slug": "swisscom",          "threshold": _telco_threshold("Swisscom")},
+    {"name": "Telia Company",       "slug": "telia",             "threshold": _telco_threshold("Telia")},
 ]
 
 # -----------------------
@@ -122,7 +121,7 @@ PROVIDERS = [
         "status_page": "https://www.google.com/appsstatus/dashboard/",
     },
 
-    # Microsoft 365 (link-only for now)
+    # Microsoft 365 (link-only)
     {
         "name": "Microsoft 365",
         "kind": "link_only",
@@ -145,7 +144,7 @@ PROVIDERS = [
         "status_page": "https://status.stripe.com/",
     },
 
-    # TRY: Adyen (attempt Statuspage-style endpoints, then fallback)
+    # TRY: Adyen (attempt Statuspage-style endpoints)
     {
         "name": "Adyen",
         "kind": "statuspage_try",
@@ -180,7 +179,7 @@ PROVIDERS = [
         "note": "Attempts to classify by parsing the public page text; may be JS-driven and not parseable.",
     },
 
-    # Amex Developers (still link-only; no reliable public incident feed)
+    # Amex Developers (link-only; no reliable public incident feed)
     {
         "name": "American Express Developers",
         "kind": "link_only",
@@ -467,12 +466,15 @@ def summarize(provider):
     return "unknown", [f"Unsupported provider kind: {kind}"]
 
 # -----------------------
-# Crowd signals logic (try next instance on 403/429/5xx)
+# Crowd signals logic
 # -----------------------
 def build_outagereport_feed_url(instance: str, slug: str, count: int) -> str:
     return instance.rstrip("/") + RSSHUB_OUTAGEREPORT_PATH_TEMPLATE.format(slug=slug.strip("/"), count=count)
 
 def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
+    """
+    Try multiple RSSHub instances. If an instance blocks us (403) or rate-limits (429), try the next.
+    """
     last_err = None
     for inst in RSSHUB_INSTANCES:
         url = build_outagereport_feed_url(inst, slug, count)
@@ -494,6 +496,11 @@ def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
     return None, [], None, None, last_err
 
 def get_crowd_signals():
+    """
+    Returns:
+      triggered: list of alerts
+      checks: list of per-service feed check metadata
+    """
     triggered = []
     checks = []
 
@@ -663,7 +670,7 @@ for r in results:
             st.info("Unknown")
 
         if r["details"]:
-            with st.expander("Details", expanded=(r["level"] != "ok")):
+            with st.expander("Details", expanded=(r["level"] != "ok")) as _:
                 for d in r["details"]:
                     st.write("• " + d)
 
