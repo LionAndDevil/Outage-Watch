@@ -16,14 +16,13 @@ st.title("Outage Watch")
 st.caption("Auto-refreshes every 60s; network responses cached for 60s.")
 st_autorefresh(interval=60_000, key="auto_refresh")
 
-DEFAULT_TIMEOUT = 12
+DEFAULT_TIMEOUT = 10
 
 # -----------------------
-# Crowd signals (Option A allowlist)
+# Crowd signals (Option A) - On demand checks (two groups)
 # Outage.Report -> RSSHub RSS
 # Route: /outagereport/:slug/:count (slug can include country paths like us/verizon)
 # -----------------------
-# Public RSSHub instances (fallback order). Public instances can rate-limit or block.
 RSSHUB_INSTANCES = [
     "https://rsshub.app",
     "https://rsshub.rssforever.com",
@@ -45,57 +44,54 @@ RSSHUB_INSTANCES = [
 RSSHUB_OUTAGEREPORT_PATH_TEMPLATE = "/outagereport/{slug}/{count}"
 
 def _telco_threshold(name: str) -> int:
-    """
-    Starter thresholds for telecoms. Increase to reduce noise.
-    """
     n = name.lower()
     if any(x in n for x in ["verizon", "t-mobile", "at&t", "o2", "ee", "bt", "vodafone uk", "virgin media"]):
         return 35
     return 30
 
+# Tag each crowd item with a group: "payments" or "telecoms"
 CROWD_ALLOWLIST = [
-    # Payments
-    {"name": "American Express", "slug": "american-express", "threshold": 30},
-    {"name": "Visa",            "slug": "visa",             "threshold": 30},
-    {"name": "Mastercard",      "slug": "mastercard",       "threshold": 30},
-    {"name": "PayPal",          "slug": "paypal",           "threshold": 25},
-    {"name": "Stripe",          "slug": "stripe",           "threshold": 25},
-    {"name": "Fiserv",          "slug": "fiserv",           "threshold": 20},
-    {"name": "Worldpay",        "slug": "worldpay",         "threshold": 20},
-    {"name": "Adyen",           "slug": "adyen",            "threshold": 20},
+    # Payments / banks / card schemes / PSPs
+    {"group": "payments", "name": "American Express", "slug": "american-express", "threshold": 30},
+    {"group": "payments", "name": "Visa",            "slug": "visa",             "threshold": 30},
+    {"group": "payments", "name": "Mastercard",      "slug": "mastercard",       "threshold": 30},
+    {"group": "payments", "name": "PayPal",          "slug": "paypal",           "threshold": 25},
+    {"group": "payments", "name": "Stripe",          "slug": "stripe",           "threshold": 25},
+    {"group": "payments", "name": "Fiserv",          "slug": "fiserv",           "threshold": 20},
+    {"group": "payments", "name": "Worldpay",        "slug": "worldpay",         "threshold": 20},
+    {"group": "payments", "name": "Adyen",           "slug": "adyen",            "threshold": 20},
 
     # Telecoms (US + UK country-path slugs where known)
-    {"name": "Verizon",            "slug": "us/verizon",      "threshold": _telco_threshold("Verizon")},
-    {"name": "T-Mobile US",        "slug": "us/t-mobile",     "threshold": _telco_threshold("T-Mobile US")},
-    {"name": "AT&T",               "slug": "us/att",          "threshold": _telco_threshold("AT&T")},
-    {"name": "Vodafone UK",        "slug": "gb/vodafone",     "threshold": _telco_threshold("Vodafone UK")},
-    {"name": "BT (UK)",            "slug": "gb/bt",           "threshold": _telco_threshold("BT (UK)")},
-    {"name": "EE (UK)",            "slug": "gb/ee",           "threshold": _telco_threshold("EE (UK)")},
-    {"name": "Virgin Media (UK)",  "slug": "gb/virgin-media", "threshold": _telco_threshold("Virgin Media (UK)")},
+    {"group": "telecoms", "name": "Verizon",           "slug": "us/verizon",       "threshold": _telco_threshold("Verizon")},
+    {"group": "telecoms", "name": "T-Mobile US",       "slug": "us/t-mobile",      "threshold": _telco_threshold("T-Mobile US")},
+    {"group": "telecoms", "name": "AT&T",              "slug": "us/att",           "threshold": _telco_threshold("AT&T")},
+    {"group": "telecoms", "name": "Vodafone UK",       "slug": "gb/vodafone",      "threshold": _telco_threshold("Vodafone UK")},
+    {"group": "telecoms", "name": "BT (UK)",           "slug": "gb/bt",            "threshold": _telco_threshold("BT (UK)")},
+    {"group": "telecoms", "name": "EE (UK)",           "slug": "gb/ee",            "threshold": _telco_threshold("EE (UK)")},
+    {"group": "telecoms", "name": "Virgin Media (UK)", "slug": "gb/virgin-media",  "threshold": _telco_threshold("Virgin Media (UK)")},
 
-    # Telecoms (trial slugs; validate via Crowd feed checks)
-    {"name": "China Mobile",        "slug": "china-mobile",      "threshold": _telco_threshold("China Mobile")},
-    {"name": "Bharti Airtel",       "slug": "bharti-airtel",     "threshold": _telco_threshold("Bharti Airtel")},
-    {"name": "Reliance Jio",        "slug": "reliance-jio",      "threshold": _telco_threshold("Reliance Jio")},
-    {"name": "China Telecom",       "slug": "china-telecom",     "threshold": _telco_threshold("China Telecom")},
-    {"name": "China Unicom",        "slug": "china-unicom",      "threshold": _telco_threshold("China Unicom")},
-    {"name": "América Móvil",       "slug": "america-movil",     "threshold": _telco_threshold("America Movil")},
-    {"name": "Vodafone Group",      "slug": "vodafone",          "threshold": _telco_threshold("Vodafone")},
-    {"name": "Orange",              "slug": "orange",            "threshold": _telco_threshold("Orange")},
-    {"name": "Telefónica",          "slug": "telefonica",        "threshold": _telco_threshold("Telefonica")},
-    {"name": "MTN Group",           "slug": "mtn",               "threshold": _telco_threshold("MTN")},
-    {"name": "Deutsche Telekom",    "slug": "deutsche-telekom",  "threshold": _telco_threshold("Deutsche Telekom")},
-    {"name": "Iliad Group",         "slug": "iliad",             "threshold": _telco_threshold("Iliad")},
-    {"name": "TIM (Telecom Italia)","slug": "tim",               "threshold": _telco_threshold("TIM")},
-    {"name": "Swisscom",            "slug": "swisscom",          "threshold": _telco_threshold("Swisscom")},
-    {"name": "Telia Company",       "slug": "telia",             "threshold": _telco_threshold("Telia")},
+    # Telecoms (trial slugs; validate via checks)
+    {"group": "telecoms", "name": "China Mobile",       "slug": "china-mobile",      "threshold": _telco_threshold("China Mobile")},
+    {"group": "telecoms", "name": "Bharti Airtel",      "slug": "bharti-airtel",     "threshold": _telco_threshold("Bharti Airtel")},
+    {"group": "telecoms", "name": "Reliance Jio",       "slug": "reliance-jio",      "threshold": _telco_threshold("Reliance Jio")},
+    {"group": "telecoms", "name": "China Telecom",      "slug": "china-telecom",     "threshold": _telco_threshold("China Telecom")},
+    {"group": "telecoms", "name": "China Unicom",       "slug": "china-unicom",      "threshold": _telco_threshold("China Unicom")},
+    {"group": "telecoms", "name": "América Móvil",      "slug": "america-movil",     "threshold": _telco_threshold("America Movil")},
+    {"group": "telecoms", "name": "Vodafone Group",     "slug": "vodafone",          "threshold": _telco_threshold("Vodafone")},
+    {"group": "telecoms", "name": "Orange",             "slug": "orange",            "threshold": _telco_threshold("Orange")},
+    {"group": "telecoms", "name": "Telefónica",         "slug": "telefonica",        "threshold": _telco_threshold("Telefonica")},
+    {"group": "telecoms", "name": "MTN Group",          "slug": "mtn",               "threshold": _telco_threshold("MTN")},
+    {"group": "telecoms", "name": "Deutsche Telekom",   "slug": "deutsche-telekom",  "threshold": _telco_threshold("Deutsche Telekom")},
+    {"group": "telecoms", "name": "Iliad Group",        "slug": "iliad",             "threshold": _telco_threshold("Iliad")},
+    {"group": "telecoms", "name": "TIM (Telecom Italia)", "slug": "tim",             "threshold": _telco_threshold("TIM")},
+    {"group": "telecoms", "name": "Swisscom",           "slug": "swisscom",          "threshold": _telco_threshold("Swisscom")},
+    {"group": "telecoms", "name": "Telia Company",      "slug": "telia",             "threshold": _telco_threshold("Telia")},
 ]
 
 # -----------------------
-# Official providers (free + official sources)
+# Official providers
 # -----------------------
 PROVIDERS = [
-    # Cloud providers
     {
         "name": "AWS",
         "kind": "rss",
@@ -120,8 +116,6 @@ PROVIDERS = [
         "url": "https://www.google.com/appsstatus/dashboard/incidents.json",
         "status_page": "https://www.google.com/appsstatus/dashboard/",
     },
-
-    # Microsoft 365 (link-only)
     {
         "name": "Microsoft 365",
         "kind": "link_only",
@@ -129,8 +123,6 @@ PROVIDERS = [
         "status_page": "https://status.cloud.microsoft",
         "note": "Public status page only (tenant service health API requires admin access).",
     },
-
-    # Payments / PSPs
     {
         "name": "PayPal",
         "kind": "rss",
@@ -143,8 +135,6 @@ PROVIDERS = [
         "url": "https://status.stripe.com/current/full",
         "status_page": "https://status.stripe.com/",
     },
-
-    # TRY: Adyen (attempt Statuspage-style endpoints)
     {
         "name": "Adyen",
         "kind": "statuspage_try",
@@ -152,8 +142,6 @@ PROVIDERS = [
         "status_page": "https://status.adyen.com/",
         "note": "Attempts public Statuspage-style JSON; if blocked/JS-only, falls back to link-only.",
     },
-
-    # End-user transaction-focused Worldpay view (WPG)
     {
         "name": "Worldpay Payments Gateway (WPG)",
         "kind": "statuspage_html",
@@ -161,16 +149,12 @@ PROVIDERS = [
         "status_page": "https://status.wpg.worldpay.com/",
         "note": "Parsed from the public WPG status page HTML.",
     },
-
-    # Schemes / scheme-adjacent
     {
         "name": "Visa Acceptance Solutions",
         "kind": "statuspage",
         "url": "https://status.visaacceptance.com/api/v2/summary.json",
         "status_page": "https://status.visaacceptance.com/",
     },
-
-    # TRY: Mastercard Developers API Status (HTML keyword parsing)
     {
         "name": "Mastercard Developers API Status",
         "kind": "mastercard_dev_html",
@@ -178,8 +162,6 @@ PROVIDERS = [
         "status_page": "https://developer.mastercard.com/api-status",
         "note": "Attempts to classify by parsing the public page text; may be JS-driven and not parseable.",
     },
-
-    # Amex Developers (link-only; no reliable public incident feed)
     {
         "name": "American Express Developers",
         "kind": "link_only",
@@ -194,9 +176,6 @@ PROVIDERS = [
 # -----------------------
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_url_with_time(url: str, timeout: int = DEFAULT_TIMEOUT):
-    """
-    Returns (bytes, fetched_at_utc). fetched_at reflects when the cached value was created.
-    """
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (X11; Linux x86_64) "
@@ -216,7 +195,7 @@ def fetch_json(url: str):
     return requests.models.complexjson.loads(raw.decode("utf-8", errors="replace"))
 
 # -----------------------
-# Helpers: scoring + levels
+# Helpers
 # -----------------------
 severity_order = {"major": 0, "degraded": 1, "unknown": 2, "info": 3, "ok": 4}
 emoji = {"ok": "✅", "degraded": "🟡", "major": "🔴", "unknown": "⚪", "info": "🔵"}
@@ -239,7 +218,7 @@ def _rss_level_from_title(title_lower: str) -> str:
     return "ok"
 
 # -----------------------
-# Summarizers: Official sources
+# Official summarizers
 # -----------------------
 def summarize_statuspage(url):
     try:
@@ -319,19 +298,14 @@ def summarize_rss(url):
 
 def summarize_gcp_incidents(url):
     try:
-        incidents = fetch_json(url)  # array
+        incidents = fetch_json(url)
     except Exception as e:
         return "unknown", [f"Fetch/parse error: {e}"]
 
     if not incidents:
         return "ok", []
 
-    active = []
-    for inc in incidents:
-        end = inc.get("end") or inc.get("resolved")
-        if not end:
-            active.append(inc)
-
+    active = [inc for inc in incidents if not (inc.get("end") or inc.get("resolved"))]
     if not active:
         return "ok", []
 
@@ -341,17 +315,15 @@ def summarize_gcp_incidents(url):
         title = inc.get("title") or inc.get("service_name") or "Incident"
         begin = inc.get("begin") or inc.get("start") or ""
         severity = (inc.get("severity") or inc.get("impact") or "").lower()
-
         if "high" in severity or "major" in severity:
             level = "major"
-
         details.append(f"{title} — started: {begin} — severity/impact: {severity or 'n/a'}")
 
     return level, details
 
 def summarize_google_workspace_incidents(url):
     try:
-        incidents = fetch_json(url)  # array
+        incidents = fetch_json(url)
     except Exception as e:
         return "unknown", [f"Fetch/parse error: {e}"]
 
@@ -370,10 +342,8 @@ def summarize_google_workspace_incidents(url):
         begin = inc.get("begin") or ""
         ext = (inc.get("external_desc") or "").strip().splitlines()[0] if inc.get("external_desc") else ""
         title = ext[:120] if ext else "Google Workspace incident"
-
         if status == "SERVICE_OUTAGE":
             level = "major"
-
         details.append(f"{title} — status: {status or 'n/a'} — began: {begin}")
 
     return level, details
@@ -384,7 +354,6 @@ def summarize_stripe_json(url):
     except Exception as e:
         return "unknown", [f"Fetch/parse error: {e}"]
 
-    # Conservative parsing (avoid false alarms)
     indicator = None
     if isinstance(data, dict):
         status = data.get("status")
@@ -466,7 +435,7 @@ def summarize(provider):
     return "unknown", [f"Unsupported provider kind: {kind}"]
 
 # -----------------------
-# Crowd signals logic
+# Crowd signals helpers (on demand)
 # -----------------------
 def build_outagereport_feed_url(instance: str, slug: str, count: int) -> str:
     return instance.rstrip("/") + RSSHUB_OUTAGEREPORT_PATH_TEMPLATE.format(slug=slug.strip("/"), count=count)
@@ -495,16 +464,15 @@ def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
             continue
     return None, [], None, None, last_err
 
-def get_crowd_signals():
+def run_crowd_signals_for_group(group_name: str):
     """
-    Returns:
-      triggered: list of alerts
-      checks: list of per-service feed check metadata
+    Returns (triggered, checks) for the requested group.
     """
+    group_items = [s for s in CROWD_ALLOWLIST if s["group"] == group_name]
     triggered = []
     checks = []
 
-    for s in CROWD_ALLOWLIST:
+    for s in group_items:
         feed_url, entries, fetched_at, inst_used, err = fetch_crowd_feed_with_fallback(s["slug"], count=10)
 
         checks.append({
@@ -557,6 +525,17 @@ def get_crowd_signals():
     return triggered, checks
 
 # -----------------------
+# Session state (store last crowd results so they persist)
+# -----------------------
+if "crowd_payments" not in st.session_state:
+    st.session_state.crowd_payments = {"ran": False, "ran_at": "", "triggered": [], "checks": []}
+if "crowd_telecoms" not in st.session_state:
+    st.session_state.crowd_telecoms = {"ran": False, "ran_at": "", "triggered": [], "checks": []}
+
+def _now_utc_str():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+# -----------------------
 # UI controls
 # -----------------------
 left, mid, right = st.columns([2, 2, 3])
@@ -573,22 +552,119 @@ with right:
     st.caption("Click provider names to open official status pages.")
 
 # -----------------------
-# Crowd signals section
+# Crowd signals section (on-demand)
 # -----------------------
-st.subheader("Crowd signals")
-monitoring = ", ".join([f"{s['name']} (≥{s['threshold']})" for s in CROWD_ALLOWLIST])
-st.caption(f"Monitoring: {monitoring}")
+st.subheader("Crowd signals (on-demand)")
 
-# TEMPORARY DEBUG: disable crowd fetching so the page cannot get stuck here.
-# If Official status appears again, the crowd fetch loop is blocking rendering.
-crowd, crowd_checks = [], []
+payments_items = [s for s in CROWD_ALLOWLIST if s["group"] == "payments"]
+telecom_items  = [s for s in CROWD_ALLOWLIST if s["group"] == "telecoms"]
 
-with st.expander("Crowd feed checks (sources & last fetched)", expanded=False):
-    st.caption("Crowd signals temporarily disabled for debugging.")
-    st.write("This is a test to confirm Official status cards render correctly without crowd fetching.")
+payments_monitoring = ", ".join([f"{s['name']} (≥{s['threshold']})" for s in payments_items])
+telecom_monitoring  = ", ".join([f"{s['name']} (≥{s['threshold']})" for s in telecom_items])
 
-if not crowd:
-    st.caption("No crowd-report spikes detected for your allowlist (crowd disabled for test).")
+with st.expander("What is monitored (by group)", expanded=False):
+    st.markdown("**Payments & Banks**")
+    st.caption(payments_monitoring if payments_monitoring else "(none)")
+    st.markdown("**Telecoms**")
+    st.caption(telecom_monitoring if telecom_monitoring else "(none)")
+
+b1, b2, b3 = st.columns([2, 2, 6])
+with b1:
+    run_payments = st.button("Run crowd check: Payments & Banks", use_container_width=True)
+with b2:
+    run_telecoms = st.button("Run crowd check: Telecoms", use_container_width=True)
+with b3:
+    st.caption("Crowd checks do not run automatically; use the buttons to fetch crowd signals.")
+
+if run_payments:
+    with st.spinner("Running crowd check (Payments & Banks)…"):
+        trig, chk = run_crowd_signals_for_group("payments")
+    st.session_state.crowd_payments = {"ran": True, "ran_at": _now_utc_str(), "triggered": trig, "checks": chk}
+
+if run_telecoms:
+    with st.spinner("Running crowd check (Telecoms)…"):
+        trig, chk = run_crowd_signals_for_group("telecoms")
+    st.session_state.crowd_telecoms = {"ran": True, "ran_at": _now_utc_str(), "triggered": trig, "checks": chk}
+
+# Render results (Payments)
+st.markdown("### Crowd results: Payments & Banks")
+cp = st.session_state.crowd_payments
+if not cp["ran"]:
+    st.info("Not run yet. Click **Run crowd check: Payments & Banks**.")
+else:
+    st.caption(f"Last run: {cp['ran_at']}")
+    if not cp["triggered"]:
+        st.success("No crowd-report spikes detected (Payments & Banks).")
+    else:
+        for c in cp["triggered"]:
+            st.error(f"🔴 {c['name']} — {c['reports']} reports (threshold: {c['threshold']})")
+            cols = st.columns([3, 2])
+            with cols[0]:
+                st.write(f"• {c['title']}")
+                if c["time"]:
+                    st.write(f"• {c['time']}")
+                if c["fetched_at"]:
+                    st.write(f"• Last fetched: {c['fetched_at']} (via {c['instance']})")
+            with cols[1]:
+                st.link_button("Open crowd-signal source", c["source_link"], key=f"pay_src_{c['name']}")
+                if c["feed_url"]:
+                    st.link_button("Open RSS feed", c["feed_url"], key=f"pay_rss_{c['name']}")
+
+    with st.expander("Payments crowd feed checks (sources & last fetched)", expanded=False):
+        st.caption("Each service is pulled from Outage.Report via RSSHub; the app tries multiple public instances.")
+        for chk in cp["checks"]:
+            status_icon = "✅" if chk["ok"] else "⚠️"
+            line = f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}"
+            if chk["fetched_at"]:
+                line += f" — last fetched: {chk['fetched_at']}"
+            if chk["instance"]:
+                line += f" — via: {chk['instance']}"
+            st.write(line)
+            if chk["feed_url"]:
+                st.link_button("Open RSS feed", chk["feed_url"], key=f"pay_feed_{chk['slug']}")
+            if chk["error"]:
+                st.caption(f"Error: {chk['error']}")
+
+st.divider()
+
+# Render results (Telecoms)
+st.markdown("### Crowd results: Telecoms")
+ct = st.session_state.crowd_telecoms
+if not ct["ran"]:
+    st.info("Not run yet. Click **Run crowd check: Telecoms**.")
+else:
+    st.caption(f"Last run: {ct['ran_at']}")
+    if not ct["triggered"]:
+        st.success("No crowd-report spikes detected (Telecoms).")
+    else:
+        for c in ct["triggered"]:
+            st.error(f"🔴 {c['name']} — {c['reports']} reports (threshold: {c['threshold']})")
+            cols = st.columns([3, 2])
+            with cols[0]:
+                st.write(f"• {c['title']}")
+                if c["time"]:
+                    st.write(f"• {c['time']}")
+                if c["fetched_at"]:
+                    st.write(f"• Last fetched: {c['fetched_at']} (via {c['instance']})")
+            with cols[1]:
+                st.link_button("Open crowd-signal source", c["source_link"], key=f"tel_src_{c['name']}")
+                if c["feed_url"]:
+                    st.link_button("Open RSS feed", c["feed_url"], key=f"tel_rss_{c['name']}")
+
+    with st.expander("Telecoms crowd feed checks (sources & last fetched)", expanded=False):
+        st.caption("Each service is pulled from Outage.Report via RSSHub; the app tries multiple public instances.")
+        for chk in ct["checks"]:
+            status_icon = "✅" if chk["ok"] else "⚠️"
+            line = f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}"
+            if chk["fetched_at"]:
+                line += f" — last fetched: {chk['fetched_at']}"
+            if chk["instance"]:
+                line += f" — via: {chk['instance']}"
+            st.write(line)
+            if chk["feed_url"]:
+                st.link_button("Open RSS feed", chk["feed_url"], key=f"tel_feed_{chk['slug']}")
+            if chk["error"]:
+                st.caption(f"Error: {chk['error']}")
 
 st.divider()
 
