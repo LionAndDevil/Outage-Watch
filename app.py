@@ -20,8 +20,6 @@ DEFAULT_TIMEOUT = 10
 
 # -----------------------
 # Crowd signals (Option A) - On demand checks (two groups)
-# Outage.Report -> RSSHub RSS
-# Route: /outagereport/:slug/:count (slug can include country paths like us/verizon)
 # -----------------------
 RSSHUB_INSTANCES = [
     "https://rsshub.app",
@@ -92,83 +90,33 @@ CROWD_ALLOWLIST = [
 # Official providers
 # -----------------------
 PROVIDERS = [
-    {
-        "name": "AWS",
-        "kind": "rss",
-        "url": "https://status.aws.amazon.com/rss/all.rss",
-        "status_page": "https://health.aws.amazon.com/health/status",
-    },
-    {
-        "name": "Azure",
-        "kind": "rss",
-        "url": "https://azurestatuscdn.azureedge.net/en-us/status/feed/",
-        "status_page": "https://azure.status.microsoft",
-    },
-    {
-        "name": "Google Cloud (GCP)",
-        "kind": "gcp_incidents",
-        "url": "https://status.cloud.google.com/incidents.json",
-        "status_page": "https://status.cloud.google.com",
-    },
-    {
-        "name": "Google Workspace",
-        "kind": "gws_incidents_json",
-        "url": "https://www.google.com/appsstatus/dashboard/incidents.json",
-        "status_page": "https://www.google.com/appsstatus/dashboard/",
-    },
-    {
-        "name": "Microsoft 365",
-        "kind": "link_only",
-        "url": "",
-        "status_page": "https://status.cloud.microsoft",
-        "note": "Public status page only (tenant service health API requires admin access).",
-    },
-    {
-        "name": "PayPal",
-        "kind": "rss",
-        "url": "https://www.paypal-status.com/feed/rss",
-        "status_page": "https://www.paypal-status.com/product/production",
-    },
-    {
-        "name": "Stripe",
-        "kind": "stripe_json",
-        "url": "https://status.stripe.com/current/full",
-        "status_page": "https://status.stripe.com/",
-    },
-    {
-        "name": "Adyen",
-        "kind": "statuspage_try",
-        "url": "https://status.adyen.com",
-        "status_page": "https://status.adyen.com/",
-        "note": "Attempts public Statuspage-style JSON; if blocked/JS-only, falls back to link-only.",
-    },
-    {
-        "name": "Worldpay Payments Gateway (WPG)",
-        "kind": "statuspage_html",
-        "url": "https://status.wpg.worldpay.com/",
-        "status_page": "https://status.wpg.worldpay.com/",
-        "note": "Parsed from the public WPG status page HTML.",
-    },
-    {
-        "name": "Visa Acceptance Solutions",
-        "kind": "statuspage",
-        "url": "https://status.visaacceptance.com/api/v2/summary.json",
-        "status_page": "https://status.visaacceptance.com/",
-    },
-    {
-        "name": "Mastercard Developers API Status",
-        "kind": "mastercard_dev_html",
-        "url": "https://developer.mastercard.com/api-status",
-        "status_page": "https://developer.mastercard.com/api-status",
-        "note": "Attempts to classify by parsing the public page text; may be JS-driven and not parseable.",
-    },
-    {
-        "name": "American Express Developers",
-        "kind": "link_only",
-        "url": "",
-        "status_page": "https://developer.americanexpress.com/",
-        "note": "No public status RSS/JSON endpoint found; link-only.",
-    },
+    {"name": "AWS", "kind": "rss", "url": "https://status.aws.amazon.com/rss/all.rss",
+     "status_page": "https://health.aws.amazon.com/health/status"},
+    {"name": "Azure", "kind": "rss", "url": "https://azurestatuscdn.azureedge.net/en-us/status/feed/",
+     "status_page": "https://azure.status.microsoft"},
+    {"name": "Google Cloud (GCP)", "kind": "gcp_incidents", "url": "https://status.cloud.google.com/incidents.json",
+     "status_page": "https://status.cloud.google.com"},
+    {"name": "Google Workspace", "kind": "gws_incidents_json", "url": "https://www.google.com/appsstatus/dashboard/incidents.json",
+     "status_page": "https://www.google.com/appsstatus/dashboard/"},
+    {"name": "Microsoft 365", "kind": "link_only", "url": "", "status_page": "https://status.cloud.microsoft",
+     "note": "Public status page only (tenant service health API requires admin access)."},
+    {"name": "PayPal", "kind": "rss", "url": "https://www.paypal-status.com/feed/rss",
+     "status_page": "https://www.paypal-status.com/product/production"},
+    {"name": "Stripe", "kind": "stripe_json", "url": "https://status.stripe.com/current/full",
+     "status_page": "https://status.stripe.com/"},
+    {"name": "Adyen", "kind": "statuspage_try", "url": "https://status.adyen.com",
+     "status_page": "https://status.adyen.com/",
+     "note": "Attempts public Statuspage-style JSON; if blocked/JS-only, falls back to link-only."},
+    {"name": "Worldpay Payments Gateway (WPG)", "kind": "statuspage_html", "url": "https://status.wpg.worldpay.com/",
+     "status_page": "https://status.wpg.worldpay.com/",
+     "note": "Parsed from the public WPG status page HTML."},
+    {"name": "Visa Acceptance Solutions", "kind": "statuspage", "url": "https://status.visaacceptance.com/api/v2/summary.json",
+     "status_page": "https://status.visaacceptance.com/"},
+    {"name": "Mastercard Developers API Status", "kind": "mastercard_dev_html", "url": "https://developer.mastercard.com/api-status",
+     "status_page": "https://developer.mastercard.com/api-status",
+     "note": "Attempts to classify by parsing the public page text; may be JS-driven and not parseable."},
+    {"name": "American Express Developers", "kind": "link_only", "url": "", "status_page": "https://developer.americanexpress.com/",
+     "note": "No public status RSS/JSON endpoint found; link-only."},
 ]
 
 # -----------------------
@@ -441,9 +389,6 @@ def build_outagereport_feed_url(instance: str, slug: str, count: int) -> str:
     return instance.rstrip("/") + RSSHUB_OUTAGEREPORT_PATH_TEMPLATE.format(slug=slug.strip("/"), count=count)
 
 def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
-    """
-    Try multiple RSSHub instances. If an instance blocks us (403) or rate-limits (429), try the next.
-    """
     last_err = None
     for inst in RSSHUB_INSTANCES:
         url = build_outagereport_feed_url(inst, slug, count)
@@ -465,9 +410,6 @@ def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
     return None, [], None, None, last_err
 
 def run_crowd_signals_for_group(group_name: str):
-    """
-    Returns (triggered, checks) for the requested group.
-    """
     group_items = [s for s in CROWD_ALLOWLIST if s["group"] == group_name]
     triggered = []
     checks = []
@@ -528,12 +470,35 @@ def run_crowd_signals_for_group(group_name: str):
 # Session state (store last crowd results so they persist)
 # -----------------------
 if "crowd_payments" not in st.session_state:
-    st.session_state.crowd_payments = {"ran": False, "ran_at": "", "triggered": [], "checks": []}
+    st.session_state.crowd_payments = {"ran": False, "ran_at": "", "triggered": [], "checks": [], "error": ""}
 if "crowd_telecoms" not in st.session_state:
-    st.session_state.crowd_telecoms = {"ran": False, "ran_at": "", "triggered": [], "checks": []}
+    st.session_state.crowd_telecoms = {"ran": False, "ran_at": "", "triggered": [], "checks": [], "error": ""}
 
 def _now_utc_str():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+def safe_run_group(group_key: str, group_name: str):
+    """
+    Always sets ran=True and ran_at, even if something fails,
+    so the UI won't stay stuck on "Not run yet".
+    """
+    try:
+        trig, chk = run_crowd_signals_for_group(group_name)
+        st.session_state[group_key] = {
+            "ran": True,
+            "ran_at": _now_utc_str(),
+            "triggered": trig,
+            "checks": chk,
+            "error": "",
+        }
+    except Exception as e:
+        st.session_state[group_key] = {
+            "ran": True,
+            "ran_at": _now_utc_str(),
+            "triggered": [],
+            "checks": [],
+            "error": str(e),
+        }
 
 # -----------------------
 # UI controls
@@ -577,14 +542,14 @@ with b3:
     st.caption("Crowd checks do not run automatically; use the buttons to fetch crowd signals.")
 
 if run_payments:
+    st.toast("Running crowd check: Payments & Banks…", icon="⏳")
     with st.spinner("Running crowd check (Payments & Banks)…"):
-        trig, chk = run_crowd_signals_for_group("payments")
-    st.session_state.crowd_payments = {"ran": True, "ran_at": _now_utc_str(), "triggered": trig, "checks": chk}
+        safe_run_group("crowd_payments", "payments")
 
 if run_telecoms:
+    st.toast("Running crowd check: Telecoms…", icon="⏳")
     with st.spinner("Running crowd check (Telecoms)…"):
-        trig, chk = run_crowd_signals_for_group("telecoms")
-    st.session_state.crowd_telecoms = {"ran": True, "ran_at": _now_utc_str(), "triggered": trig, "checks": chk}
+        safe_run_group("crowd_telecoms", "telecoms")
 
 # Render results (Payments)
 st.markdown("### Crowd results: Payments & Banks")
@@ -593,6 +558,8 @@ if not cp["ran"]:
     st.info("Not run yet. Click **Run crowd check: Payments & Banks**.")
 else:
     st.caption(f"Last run: {cp['ran_at']}")
+    if cp.get("error"):
+        st.error(f"Payments crowd check error: {cp['error']}")
     if not cp["triggered"]:
         st.success("No crowd-report spikes detected (Payments & Banks).")
     else:
@@ -611,7 +578,6 @@ else:
                     st.link_button("Open RSS feed", c["feed_url"], key=f"pay_rss_{c['name']}")
 
     with st.expander("Payments crowd feed checks (sources & last fetched)", expanded=False):
-        st.caption("Each service is pulled from Outage.Report via RSSHub; the app tries multiple public instances.")
         for chk in cp["checks"]:
             status_icon = "✅" if chk["ok"] else "⚠️"
             line = f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}"
@@ -634,6 +600,8 @@ if not ct["ran"]:
     st.info("Not run yet. Click **Run crowd check: Telecoms**.")
 else:
     st.caption(f"Last run: {ct['ran_at']}")
+    if ct.get("error"):
+        st.error(f"Telecoms crowd check error: {ct['error']}")
     if not ct["triggered"]:
         st.success("No crowd-report spikes detected (Telecoms).")
     else:
@@ -652,7 +620,6 @@ else:
                     st.link_button("Open RSS feed", c["feed_url"], key=f"tel_rss_{c['name']}")
 
     with st.expander("Telecoms crowd feed checks (sources & last fetched)", expanded=False):
-        st.caption("Each service is pulled from Outage.Report via RSSHub; the app tries multiple public instances.")
         for chk in ct["checks"]:
             status_icon = "✅" if chk["ok"] else "⚠️"
             line = f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}"
