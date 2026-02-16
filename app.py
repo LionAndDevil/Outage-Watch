@@ -67,21 +67,21 @@ CROWD_ALLOWLIST = [
     {"group": "telecoms", "name": "Virgin Media (UK)", "slug": "gb/virgin-media",  "threshold": _telco_threshold("Virgin Media (UK)")},
 
     # Telecoms (trial slugs; validate)
-    {"group": "telecoms", "name": "China Mobile",        "slug": "china-mobile",      "threshold": _telco_threshold("China Mobile")},
-    {"group": "telecoms", "name": "Bharti Airtel",       "slug": "bharti-airtel",     "threshold": _telco_threshold("Bharti Airtel")},
-    {"group": "telecoms", "name": "Reliance Jio",        "slug": "reliance-jio",      "threshold": _telco_threshold("Reliance Jio")},
-    {"group": "telecoms", "name": "China Telecom",       "slug": "china-telecom",     "threshold": _telco_threshold("China Telecom")},
-    {"group": "telecoms", "name": "China Unicom",        "slug": "china-unicom",      "threshold": _telco_threshold("China Unicom")},
-    {"group": "telecoms", "name": "América Móvil",       "slug": "america-movil",     "threshold": _telco_threshold("America Movil")},
-    {"group": "telecoms", "name": "Vodafone Group",      "slug": "vodafone",          "threshold": _telco_threshold("Vodafone")},
-    {"group": "telecoms", "name": "Orange",              "slug": "orange",            "threshold": _telco_threshold("Orange")},
-    {"group": "telecoms", "name": "Telefónica",          "slug": "telefonica",        "threshold": _telco_threshold("Telefonica")},
-    {"group": "telecoms", "name": "MTN Group",           "slug": "mtn",               "threshold": _telco_threshold("MTN")},
-    {"group": "telecoms", "name": "Deutsche Telekom",    "slug": "deutsche-telekom",  "threshold": _telco_threshold("Deutsche Telekom")},
-    {"group": "telecoms", "name": "Iliad Group",         "slug": "iliad",             "threshold": _telco_threshold("Iliad")},
-    {"group": "telecoms", "name": "TIM (Telecom Italia)","slug": "tim",               "threshold": _telco_threshold("TIM")},
-    {"group": "telecoms", "name": "Swisscom",            "slug": "swisscom",          "threshold": _telco_threshold("Swisscom")},
-    {"group": "telecoms", "name": "Telia Company",       "slug": "telia",             "threshold": _telco_threshold("Telia")},
+    {"group": "telecoms", "name": "China Mobile",         "slug": "china-mobile",      "threshold": _telco_threshold("China Mobile")},
+    {"group": "telecoms", "name": "Bharti Airtel",        "slug": "bharti-airtel",     "threshold": _telco_threshold("Bharti Airtel")},
+    {"group": "telecoms", "name": "Reliance Jio",         "slug": "reliance-jio",      "threshold": _telco_threshold("Reliance Jio")},
+    {"group": "telecoms", "name": "China Telecom",        "slug": "china-telecom",     "threshold": _telco_threshold("China Telecom")},
+    {"group": "telecoms", "name": "China Unicom",         "slug": "china-unicom",      "threshold": _telco_threshold("China Unicom")},
+    {"group": "telecoms", "name": "América Móvil",        "slug": "america-movil",     "threshold": _telco_threshold("America Movil")},
+    {"group": "telecoms", "name": "Vodafone Group",       "slug": "vodafone",          "threshold": _telco_threshold("Vodafone")},
+    {"group": "telecoms", "name": "Orange",               "slug": "orange",            "threshold": _telco_threshold("Orange")},
+    {"group": "telecoms", "name": "Telefónica",           "slug": "telefonica",        "threshold": _telco_threshold("Telefonica")},
+    {"group": "telecoms", "name": "MTN Group",            "slug": "mtn",               "threshold": _telco_threshold("MTN")},
+    {"group": "telecoms", "name": "Deutsche Telekom",     "slug": "deutsche-telekom",  "threshold": _telco_threshold("Deutsche Telekom")},
+    {"group": "telecoms", "name": "Iliad Group",          "slug": "iliad",             "threshold": _telco_threshold("Iliad")},
+    {"group": "telecoms", "name": "TIM (Telecom Italia)", "slug": "tim",               "threshold": _telco_threshold("TIM")},
+    {"group": "telecoms", "name": "Swisscom",             "slug": "swisscom",          "threshold": _telco_threshold("Swisscom")},
+    {"group": "telecoms", "name": "Telia Company",        "slug": "telia",             "threshold": _telco_threshold("Telia")},
 ]
 
 # -----------------------
@@ -407,12 +407,22 @@ def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
             continue
     return None, [], None, None, last_err
 
+# --- UPDATED: returns (triggered, checks, internal_diag) ---
 def run_crowd_signals_for_group(group_name: str):
-    group_items = [s for s in CROWD_ALLOWLIST if s["group"] == group_name]
+    group_items = [s for s in CROWD_ALLOWLIST if s.get("group") == group_name]
     triggered = []
     checks = []
 
+    internal_diag = {
+        "group_name": group_name,
+        "group_items_len": len(group_items),
+        "entered_loop": False,
+        "checks_len_end": 0,
+    }
+
     for s in group_items:
+        internal_diag["entered_loop"] = True
+
         feed_url, entries, fetched_at, inst_used, err = fetch_crowd_feed_with_fallback(s["slug"], count=10)
 
         checks.append({
@@ -462,7 +472,9 @@ def run_crowd_signals_for_group(group_name: str):
             })
 
     triggered.sort(key=lambda x: x["reports"], reverse=True)
-    return triggered, checks
+    internal_diag["checks_len_end"] = len(checks)
+
+    return triggered, checks, internal_diag
 
 def _now_utc_str():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -493,7 +505,6 @@ else:
     st_autorefresh(interval=60_000, key="auto_refresh")
 
 def safe_run_group(state_key: str, group_name: str):
-    # Mark as "ran" immediately so UI won't stay stuck
     st.session_state[state_key]["ran"] = True
     st.session_state[state_key]["ran_at"] = _now_utc_str()
     st.session_state[state_key]["error"] = ""
@@ -502,7 +513,6 @@ def safe_run_group(state_key: str, group_name: str):
     st.session_state[state_key]["diag"] = {}
 
     try:
-        # DIAGNOSTICS: what does the app see right now?
         seen_groups = sorted(set([str(s.get("group")) for s in CROWD_ALLOWLIST if isinstance(s, dict)]))
         group_items = [s for s in CROWD_ALLOWLIST if isinstance(s, dict) and s.get("group") == group_name]
 
@@ -524,7 +534,10 @@ def safe_run_group(state_key: str, group_name: str):
             )
             return
 
-        trig, chk = run_crowd_signals_for_group(group_name)
+        # --- UPDATED: handle third return value ---
+        trig, chk, internal = run_crowd_signals_for_group(group_name)
+        st.session_state[state_key]["diag"]["internal"] = internal
+
         st.session_state[state_key]["triggered"] = trig
         st.session_state[state_key]["checks"] = chk
     except Exception as e:
@@ -654,7 +667,7 @@ else:
             if chk["feed_url"]:
                 st.link_button("Open RSS feed", chk["feed_url"], key=f"tel_feed_{chk['slug']}")
             if chk["error"]:
-                st.caption(f"Error: {chk['error']}")
+                st.caption(f"Error: {chk["error"]}")
 
 st.divider()
 
