@@ -13,8 +13,6 @@ from streamlit_autorefresh import st_autorefresh
 # -----------------------
 st.set_page_config(page_title="Outage Watch", layout="wide")
 st.title("Outage Watch")
-st.caption("Auto-refreshes every 60s; network responses cached for 60s.")
-st_autorefresh(interval=60_000, key="auto_refresh")
 
 DEFAULT_TIMEOUT = 10
 
@@ -477,8 +475,25 @@ if "crowd_payments" not in st.session_state:
 if "crowd_telecoms" not in st.session_state:
     st.session_state["crowd_telecoms"] = {"ran": False, "ran_at": "", "triggered": [], "checks": [], "error": ""}
 
+# -----------------------
+# Auto-refresh behavior
+# - Refresh every 60s by default
+# - Pause auto-refresh after any crowd check so results stay visible
+# -----------------------
+disable_autorefresh = bool(st.session_state["crowd_payments"].get("ran")) or bool(st.session_state["crowd_telecoms"].get("ran"))
+
+if disable_autorefresh:
+    st.caption("Auto-refresh is paused after running Crowd checks (to keep results visible).")
+    if st.button("Resume auto-refresh (60s)"):
+        st.session_state["crowd_payments"]["ran"] = False
+        st.session_state["crowd_telecoms"]["ran"] = False
+        st.rerun()
+else:
+    st.caption("Auto-refreshes every 60s; network responses cached for 60s.")
+    st_autorefresh(interval=60_000, key="auto_refresh")
+
 def safe_run_group(state_key: str, group_name: str):
-    # Mark as "ran" immediately so the UI can never stay stuck on "Not run yet"
+    # Mark as "ran" immediately so UI won't stay stuck
     st.session_state[state_key]["ran"] = True
     st.session_state[state_key]["ran_at"] = _now_utc_str()
     st.session_state[state_key]["error"] = ""
@@ -565,6 +580,8 @@ else:
                     st.link_button("Open RSS feed", c["feed_url"], key=f"pay_rss_{c['name']}")
 
     with st.expander("Payments crowd feed checks (sources & last fetched)", expanded=False):
+        if not cp["checks"]:
+            st.info("No checks recorded (unexpected).")
         for chk in cp["checks"]:
             status_icon = "✅" if chk["ok"] else "⚠️"
             st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
@@ -602,6 +619,8 @@ else:
                     st.link_button("Open RSS feed", c["feed_url"], key=f"tel_rss_{c['name']}")
 
     with st.expander("Telecoms crowd feed checks (sources & last fetched)", expanded=False):
+        if not ct["checks"]:
+            st.info("No checks recorded (unexpected).")
         for chk in ct["checks"]:
             status_icon = "✅" if chk["ok"] else "⚠️"
             st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
