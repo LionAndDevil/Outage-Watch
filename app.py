@@ -471,9 +471,9 @@ def _now_utc_str():
 # Session state
 # -----------------------
 if "crowd_payments" not in st.session_state:
-    st.session_state["crowd_payments"] = {"ran": False, "ran_at": "", "triggered": [], "checks": [], "error": ""}
+    st.session_state["crowd_payments"] = {"ran": False, "ran_at": "", "triggered": [], "checks": [], "error": "", "diag": {}}
 if "crowd_telecoms" not in st.session_state:
-    st.session_state["crowd_telecoms"] = {"ran": False, "ran_at": "", "triggered": [], "checks": [], "error": ""}
+    st.session_state["crowd_telecoms"] = {"ran": False, "ran_at": "", "triggered": [], "checks": [], "error": "", "diag": {}}
 
 # -----------------------
 # Auto-refresh behavior
@@ -499,8 +499,31 @@ def safe_run_group(state_key: str, group_name: str):
     st.session_state[state_key]["error"] = ""
     st.session_state[state_key]["triggered"] = []
     st.session_state[state_key]["checks"] = []
+    st.session_state[state_key]["diag"] = {}
 
     try:
+        # DIAGNOSTICS: what does the app see right now?
+        seen_groups = sorted(set([str(s.get("group")) for s in CROWD_ALLOWLIST if isinstance(s, dict)]))
+        group_items = [s for s in CROWD_ALLOWLIST if isinstance(s, dict) and s.get("group") == group_name]
+
+        st.session_state[state_key]["diag"] = {
+            "group_name_requested": group_name,
+            "allowlist_len": len(CROWD_ALLOWLIST),
+            "unique_groups_seen": seen_groups,
+            "items_in_group": len(group_items),
+            "sample_items": [
+                {"name": s.get("name"), "group": s.get("group"), "slug": s.get("slug")}
+                for s in group_items[:3]
+            ],
+        }
+
+        if len(group_items) == 0:
+            st.session_state[state_key]["error"] = (
+                f"No items found for group='{group_name}'. "
+                f"Groups seen: {seen_groups}"
+            )
+            return
+
         trig, chk = run_crowd_signals_for_group(group_name)
         st.session_state[state_key]["triggered"] = trig
         st.session_state[state_key]["checks"] = chk
@@ -560,6 +583,8 @@ if not cp["ran"]:
     st.info("Not run yet. Click **Run crowd check: Payments & Banks**.")
 else:
     st.caption(f"Last run: {cp['ran_at']}")
+    if cp.get("diag"):
+        st.json(cp["diag"])
     if cp["error"]:
         st.error(f"Payments crowd check error: {cp['error']}")
     if not cp["triggered"]:
@@ -599,6 +624,8 @@ if not ct["ran"]:
     st.info("Not run yet. Click **Run crowd check: Telecoms**.")
 else:
     st.caption(f"Last run: {ct['ran_at']}")
+    if ct.get("diag"):
+        st.json(ct["diag"])
     if ct["error"]:
         st.error(f"Telecoms crowd check error: {ct['error']}")
     if not ct["triggered"]:
