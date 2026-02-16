@@ -59,7 +59,7 @@ CROWD_ALLOWLIST = [
     {"group": "payments", "name": "Worldpay",        "slug": "worldpay",         "threshold": 20},
     {"group": "payments", "name": "Adyen",           "slug": "adyen",            "threshold": 20},
 
-    # Telecoms (US + UK country-path slugs where known)
+    # Telecoms (US + UK)
     {"group": "telecoms", "name": "Verizon",           "slug": "us/verizon",       "threshold": _telco_threshold("Verizon")},
     {"group": "telecoms", "name": "T-Mobile US",       "slug": "us/t-mobile",      "threshold": _telco_threshold("T-Mobile US")},
     {"group": "telecoms", "name": "AT&T",              "slug": "us/att",           "threshold": _telco_threshold("AT&T")},
@@ -68,22 +68,22 @@ CROWD_ALLOWLIST = [
     {"group": "telecoms", "name": "EE (UK)",           "slug": "gb/ee",            "threshold": _telco_threshold("EE (UK)")},
     {"group": "telecoms", "name": "Virgin Media (UK)", "slug": "gb/virgin-media",  "threshold": _telco_threshold("Virgin Media (UK)")},
 
-    # Telecoms (trial slugs; validate via checks)
-    {"group": "telecoms", "name": "China Mobile",       "slug": "china-mobile",      "threshold": _telco_threshold("China Mobile")},
-    {"group": "telecoms", "name": "Bharti Airtel",      "slug": "bharti-airtel",     "threshold": _telco_threshold("Bharti Airtel")},
-    {"group": "telecoms", "name": "Reliance Jio",       "slug": "reliance-jio",      "threshold": _telco_threshold("Reliance Jio")},
-    {"group": "telecoms", "name": "China Telecom",      "slug": "china-telecom",     "threshold": _telco_threshold("China Telecom")},
-    {"group": "telecoms", "name": "China Unicom",       "slug": "china-unicom",      "threshold": _telco_threshold("China Unicom")},
-    {"group": "telecoms", "name": "América Móvil",      "slug": "america-movil",     "threshold": _telco_threshold("America Movil")},
-    {"group": "telecoms", "name": "Vodafone Group",     "slug": "vodafone",          "threshold": _telco_threshold("Vodafone")},
-    {"group": "telecoms", "name": "Orange",             "slug": "orange",            "threshold": _telco_threshold("Orange")},
-    {"group": "telecoms", "name": "Telefónica",         "slug": "telefonica",        "threshold": _telco_threshold("Telefonica")},
-    {"group": "telecoms", "name": "MTN Group",          "slug": "mtn",               "threshold": _telco_threshold("MTN")},
-    {"group": "telecoms", "name": "Deutsche Telekom",   "slug": "deutsche-telekom",  "threshold": _telco_threshold("Deutsche Telekom")},
-    {"group": "telecoms", "name": "Iliad Group",        "slug": "iliad",             "threshold": _telco_threshold("Iliad")},
-    {"group": "telecoms", "name": "TIM (Telecom Italia)", "slug": "tim",             "threshold": _telco_threshold("TIM")},
-    {"group": "telecoms", "name": "Swisscom",           "slug": "swisscom",          "threshold": _telco_threshold("Swisscom")},
-    {"group": "telecoms", "name": "Telia Company",      "slug": "telia",             "threshold": _telco_threshold("Telia")},
+    # Telecoms (trial slugs; validate)
+    {"group": "telecoms", "name": "China Mobile",        "slug": "china-mobile",      "threshold": _telco_threshold("China Mobile")},
+    {"group": "telecoms", "name": "Bharti Airtel",       "slug": "bharti-airtel",     "threshold": _telco_threshold("Bharti Airtel")},
+    {"group": "telecoms", "name": "Reliance Jio",        "slug": "reliance-jio",      "threshold": _telco_threshold("Reliance Jio")},
+    {"group": "telecoms", "name": "China Telecom",       "slug": "china-telecom",     "threshold": _telco_threshold("China Telecom")},
+    {"group": "telecoms", "name": "China Unicom",        "slug": "china-unicom",      "threshold": _telco_threshold("China Unicom")},
+    {"group": "telecoms", "name": "América Móvil",       "slug": "america-movil",     "threshold": _telco_threshold("America Movil")},
+    {"group": "telecoms", "name": "Vodafone Group",      "slug": "vodafone",          "threshold": _telco_threshold("Vodafone")},
+    {"group": "telecoms", "name": "Orange",              "slug": "orange",            "threshold": _telco_threshold("Orange")},
+    {"group": "telecoms", "name": "Telefónica",          "slug": "telefonica",        "threshold": _telco_threshold("Telefonica")},
+    {"group": "telecoms", "name": "MTN Group",           "slug": "mtn",               "threshold": _telco_threshold("MTN")},
+    {"group": "telecoms", "name": "Deutsche Telekom",    "slug": "deutsche-telekom",  "threshold": _telco_threshold("Deutsche Telekom")},
+    {"group": "telecoms", "name": "Iliad Group",         "slug": "iliad",             "threshold": _telco_threshold("Iliad")},
+    {"group": "telecoms", "name": "TIM (Telecom Italia)","slug": "tim",               "threshold": _telco_threshold("TIM")},
+    {"group": "telecoms", "name": "Swisscom",            "slug": "swisscom",          "threshold": _telco_threshold("Swisscom")},
+    {"group": "telecoms", "name": "Telia Company",       "slug": "telia",             "threshold": _telco_threshold("Telia")},
 ]
 
 # -----------------------
@@ -466,39 +466,31 @@ def run_crowd_signals_for_group(group_name: str):
     triggered.sort(key=lambda x: x["reports"], reverse=True)
     return triggered, checks
 
-# -----------------------
-# Session state (store last crowd results so they persist)
-# -----------------------
-if "crowd_payments" not in st.session_state:
-    st.session_state.crowd_payments = {"ran": False, "ran_at": "", "triggered": [], "checks": [], "error": ""}
-if "crowd_telecoms" not in st.session_state:
-    st.session_state.crowd_telecoms = {"ran": False, "ran_at": "", "triggered": [], "checks": [], "error": ""}
-
 def _now_utc_str():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
-def safe_run_group(group_key: str, group_name: str):
-    """
-    Always sets ran=True and ran_at, even if something fails,
-    so the UI won't stay stuck on "Not run yet".
-    """
+# -----------------------
+# Session state
+# -----------------------
+if "crowd_payments" not in st.session_state:
+    st.session_state["crowd_payments"] = {"ran": False, "ran_at": "", "triggered": [], "checks": [], "error": ""}
+if "crowd_telecoms" not in st.session_state:
+    st.session_state["crowd_telecoms"] = {"ran": False, "ran_at": "", "triggered": [], "checks": [], "error": ""}
+
+def safe_run_group(state_key: str, group_name: str):
+    # Mark as "ran" immediately so the UI can never stay stuck on "Not run yet"
+    st.session_state[state_key]["ran"] = True
+    st.session_state[state_key]["ran_at"] = _now_utc_str()
+    st.session_state[state_key]["error"] = ""
+    st.session_state[state_key]["triggered"] = []
+    st.session_state[state_key]["checks"] = []
+
     try:
         trig, chk = run_crowd_signals_for_group(group_name)
-        st.session_state[group_key] = {
-            "ran": True,
-            "ran_at": _now_utc_str(),
-            "triggered": trig,
-            "checks": chk,
-            "error": "",
-        }
+        st.session_state[state_key]["triggered"] = trig
+        st.session_state[state_key]["checks"] = chk
     except Exception as e:
-        st.session_state[group_key] = {
-            "ran": True,
-            "ran_at": _now_utc_str(),
-            "triggered": [],
-            "checks": [],
-            "error": str(e),
-        }
+        st.session_state[state_key]["error"] = str(e)
 
 # -----------------------
 # UI controls
@@ -524,41 +516,36 @@ st.subheader("Crowd signals (on-demand)")
 payments_items = [s for s in CROWD_ALLOWLIST if s["group"] == "payments"]
 telecom_items  = [s for s in CROWD_ALLOWLIST if s["group"] == "telecoms"]
 
-payments_monitoring = ", ".join([f"{s['name']} (≥{s['threshold']})" for s in payments_items])
-telecom_monitoring  = ", ".join([f"{s['name']} (≥{s['threshold']})" for s in telecom_items])
-
 with st.expander("What is monitored (by group)", expanded=False):
     st.markdown("**Payments & Banks**")
-    st.caption(payments_monitoring if payments_monitoring else "(none)")
+    st.caption(", ".join([f"{s['name']} (≥{s['threshold']})" for s in payments_items]) or "(none)")
     st.markdown("**Telecoms**")
-    st.caption(telecom_monitoring if telecom_monitoring else "(none)")
+    st.caption(", ".join([f"{s['name']} (≥{s['threshold']})" for s in telecom_items]) or "(none)")
 
 b1, b2, b3 = st.columns([2, 2, 6])
 with b1:
-    run_payments = st.button("Run crowd check: Payments & Banks", use_container_width=True)
+    run_payments = st.button("Run crowd check: Payments & Banks", use_container_width=True, key="btn_payments")
 with b2:
-    run_telecoms = st.button("Run crowd check: Telecoms", use_container_width=True)
+    run_telecoms = st.button("Run crowd check: Telecoms", use_container_width=True, key="btn_telecoms")
 with b3:
     st.caption("Crowd checks do not run automatically; use the buttons to fetch crowd signals.")
 
 if run_payments:
-    st.toast("Running crowd check: Payments & Banks…", icon="⏳")
     with st.spinner("Running crowd check (Payments & Banks)…"):
         safe_run_group("crowd_payments", "payments")
 
 if run_telecoms:
-    st.toast("Running crowd check: Telecoms…", icon="⏳")
     with st.spinner("Running crowd check (Telecoms)…"):
         safe_run_group("crowd_telecoms", "telecoms")
 
 # Render results (Payments)
 st.markdown("### Crowd results: Payments & Banks")
-cp = st.session_state.crowd_payments
+cp = st.session_state["crowd_payments"]
 if not cp["ran"]:
     st.info("Not run yet. Click **Run crowd check: Payments & Banks**.")
 else:
     st.caption(f"Last run: {cp['ran_at']}")
-    if cp.get("error"):
+    if cp["error"]:
         st.error(f"Payments crowd check error: {cp['error']}")
     if not cp["triggered"]:
         st.success("No crowd-report spikes detected (Payments & Banks).")
@@ -580,12 +567,7 @@ else:
     with st.expander("Payments crowd feed checks (sources & last fetched)", expanded=False):
         for chk in cp["checks"]:
             status_icon = "✅" if chk["ok"] else "⚠️"
-            line = f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}"
-            if chk["fetched_at"]:
-                line += f" — last fetched: {chk['fetched_at']}"
-            if chk["instance"]:
-                line += f" — via: {chk['instance']}"
-            st.write(line)
+            st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
             if chk["feed_url"]:
                 st.link_button("Open RSS feed", chk["feed_url"], key=f"pay_feed_{chk['slug']}")
             if chk["error"]:
@@ -595,12 +577,12 @@ st.divider()
 
 # Render results (Telecoms)
 st.markdown("### Crowd results: Telecoms")
-ct = st.session_state.crowd_telecoms
+ct = st.session_state["crowd_telecoms"]
 if not ct["ran"]:
     st.info("Not run yet. Click **Run crowd check: Telecoms**.")
 else:
     st.caption(f"Last run: {ct['ran_at']}")
-    if ct.get("error"):
+    if ct["error"]:
         st.error(f"Telecoms crowd check error: {ct['error']}")
     if not ct["triggered"]:
         st.success("No crowd-report spikes detected (Telecoms).")
@@ -622,12 +604,7 @@ else:
     with st.expander("Telecoms crowd feed checks (sources & last fetched)", expanded=False):
         for chk in ct["checks"]:
             status_icon = "✅" if chk["ok"] else "⚠️"
-            line = f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}"
-            if chk["fetched_at"]:
-                line += f" — last fetched: {chk['fetched_at']}"
-            if chk["instance"]:
-                line += f" — via: {chk['instance']}"
-            st.write(line)
+            st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
             if chk["feed_url"]:
                 st.link_button("Open RSS feed", chk["feed_url"], key=f"tel_feed_{chk['slug']}")
             if chk["error"]:
