@@ -407,7 +407,7 @@ def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
             continue
     return None, [], None, None, last_err
 
-# --- UPDATED: returns (triggered, checks, internal_diag) ---
+# --- FIXED/UPDATED: returns (triggered, checks, internal_diag) ---
 def run_crowd_signals_for_group(group_name: str):
     group_items = [s for s in CROWD_ALLOWLIST if s.get("group") == group_name]
     triggered = []
@@ -534,7 +534,7 @@ def safe_run_group(state_key: str, group_name: str):
             )
             return
 
-        # --- UPDATED: handle third return value ---
+        # --- FIXED: handle third return value + attach internal diag ---
         trig, chk, internal = run_crowd_signals_for_group(group_name)
         st.session_state[state_key]["diag"]["internal"] = internal
 
@@ -666,8 +666,8 @@ else:
             st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
             if chk["feed_url"]:
                 st.link_button("Open RSS feed", chk["feed_url"], key=f"tel_feed_{chk['slug']}")
-            if chk["error"]:
-                st.caption(f"Error: {chk["error"]}")
+            if chk.get("error"):
+                st.caption(f"Error: {chk.get('error')}")
 
 st.divider()
 
