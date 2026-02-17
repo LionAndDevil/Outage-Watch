@@ -15,7 +15,7 @@ st.set_page_config(page_title="Outage Watch", layout="wide")
 st.title("Outage Watch")
 
 # Build marker (helps confirm Streamlit is running the latest commit)
-st.caption("BUILD: 2026-02-17 internal-diag-v3-checkpoints")
+st.caption("BUILD: 2026-02-17 internal-diag-v4-run-exception")
 
 DEFAULT_TIMEOUT = 10
 
@@ -504,7 +504,7 @@ else:
     st_autorefresh(interval=60_000, key="auto_refresh")
 
 # -----------------------
-# SAFE runner (indentation-safe + checkpoints + exception surfaced into JSON)
+# SAFE runner (indentation-safe + checkpoints + run_exception + exception surfaced into JSON)
 # -----------------------
 def safe_run_group(state_key: str, group_name: str):
     st.session_state[state_key]["ran"] = True
@@ -536,34 +536,33 @@ def safe_run_group(state_key: str, group_name: str):
             )
             return
 
-        # --- checkpoints to prove where it fails ---
         st.session_state[state_key]["diag"]["checkpoint_before_run"] = True
 
-try:
-    trig, chk, internal = run_crowd_signals_for_group(group_name)
-except Exception as e:
-    # Make the failure unmissable in the JSON
-    st.session_state[state_key]["error"] = str(e)
-    st.session_state[state_key]["diag"]["run_exception"] = str(e)
-    st.session_state[state_key]["diag"]["checkpoint_after_run"] = False
-    st.session_state[state_key]["diag"]["internal"] = {
-        "exception": str(e),
-        "where": "run_crowd_signals_for_group",
-        "note": "Crash occurred after checkpoint_before_run, inside the crowd loop."
-    }
-    return
+        try:
+            trig, chk, internal = run_crowd_signals_for_group(group_name)
+        except Exception as e:
+            st.session_state[state_key]["error"] = str(e)
+            st.session_state[state_key]["diag"]["checkpoint_after_run"] = False
+            st.session_state[state_key]["diag"]["run_exception"] = str(e)
+            st.session_state[state_key]["diag"]["internal"] = {
+                "exception": str(e),
+                "where": "run_crowd_signals_for_group",
+                "note": "Crash occurred after checkpoint_before_run, inside the crowd loop."
+            }
+            return
 
-st.session_state[state_key]["diag"]["checkpoint_after_run"] = True
-st.session_state[state_key]["diag"]["internal"] = internal
+        st.session_state[state_key]["diag"]["checkpoint_after_run"] = True
+        st.session_state[state_key]["diag"]["internal"] = internal
 
-st.session_state[state_key]["triggered"] = trig
-st.session_state[state_key]["checks"] = chk
+        st.session_state[state_key]["triggered"] = trig
+        st.session_state[state_key]["checks"] = chk
 
     except Exception as e:
         st.session_state[state_key]["error"] = str(e)
         st.session_state[state_key]["diag"]["internal"] = {
             "exception": str(e),
-            "note": "Exception occurred before checks could be stored."
+            "where": "safe_run_group",
+            "note": "Crash occurred before/around setup, outside the crowd loop."
         }
 
 # -----------------------
