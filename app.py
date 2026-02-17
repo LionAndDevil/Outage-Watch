@@ -539,13 +539,25 @@ def safe_run_group(state_key: str, group_name: str):
         # --- checkpoints to prove where it fails ---
         st.session_state[state_key]["diag"]["checkpoint_before_run"] = True
 
-        trig, chk, internal = run_crowd_signals_for_group(group_name)
+        try:
+    trig, chk, internal = run_crowd_signals_for_group(group_name)
+except Exception as e:
+    # Make the failure unmissable in the JSON
+    st.session_state[state_key]["error"] = str(e)
+    st.session_state[state_key]["diag"]["run_exception"] = str(e)
+    st.session_state[state_key]["diag"]["checkpoint_after_run"] = False
+    st.session_state[state_key]["diag"]["internal"] = {
+        "exception": str(e),
+        "where": "run_crowd_signals_for_group",
+        "note": "Crash occurred after checkpoint_before_run, inside the crowd loop."
+    }
+    return
 
-        st.session_state[state_key]["diag"]["checkpoint_after_run"] = True
-        st.session_state[state_key]["diag"]["internal"] = internal
+st.session_state[state_key]["diag"]["checkpoint_after_run"] = True
+st.session_state[state_key]["diag"]["internal"] = internal
 
-        st.session_state[state_key]["triggered"] = trig
-        st.session_state[state_key]["checks"] = chk
+st.session_state[state_key]["triggered"] = trig
+st.session_state[state_key]["checks"] = chk
 
     except Exception as e:
         st.session_state[state_key]["error"] = str(e)
