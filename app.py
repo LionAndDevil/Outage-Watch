@@ -15,7 +15,7 @@ st.set_page_config(page_title="Outage Watch", layout="wide")
 st.title("Outage Watch")
 
 # Build marker (helps confirm Streamlit is running the latest commit)
-st.caption("BUILD: 2026-02-17 internal-diag-v2")
+st.caption("BUILD: 2026-02-17 internal-diag-v3-checkpoints")
 
 DEFAULT_TIMEOUT = 10
 
@@ -504,7 +504,7 @@ else:
     st_autorefresh(interval=60_000, key="auto_refresh")
 
 # -----------------------
-# SAFE runner (indentation-safe + exception surfaced into JSON)
+# SAFE runner (indentation-safe + checkpoints + exception surfaced into JSON)
 # -----------------------
 def safe_run_group(state_key: str, group_name: str):
     st.session_state[state_key]["ran"] = True
@@ -536,9 +536,12 @@ def safe_run_group(state_key: str, group_name: str):
             )
             return
 
-st.session_state[state_key]["diag"]["checkpoint_before_run"] = True        
+        # --- checkpoints to prove where it fails ---
+        st.session_state[state_key]["diag"]["checkpoint_before_run"] = True
+
         trig, chk, internal = run_crowd_signals_for_group(group_name)
-st.session_state[state_key]["diag"]["checkpoint_after_run"] = True
+
+        st.session_state[state_key]["diag"]["checkpoint_after_run"] = True
         st.session_state[state_key]["diag"]["internal"] = internal
 
         st.session_state[state_key]["triggered"] = trig
