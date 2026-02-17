@@ -544,8 +544,13 @@ def safe_run_group(state_key: str, group_name: str):
 
         st.session_state[state_key]["triggered"] = trig
         st.session_state[state_key]["checks"] = chk
-    except Exception as e:
+      except Exception as e:
         st.session_state[state_key]["error"] = str(e)
+        # Force the exception into the JSON so we can see what's breaking
+        st.session_state[state_key]["diag"]["internal"] = {
+            "exception": str(e),
+            "note": "Exception occurred before checks could be stored."
+        }
 
 # -----------------------
 # UI controls
