@@ -538,13 +538,13 @@ def safe_run_group(state_key: str, group_name: str):
             )
             return
 
-        # --- FIX: capture and display internal diag from the crowd function ---
         trig, chk, internal = run_crowd_signals_for_group(group_name)
         st.session_state[state_key]["diag"]["internal"] = internal
 
         st.session_state[state_key]["triggered"] = trig
         st.session_state[state_key]["checks"] = chk
-      except Exception as e:
+
+    except Exception as e:
         st.session_state[state_key]["error"] = str(e)
         # Force the exception into the JSON so we can see what's breaking
         st.session_state[state_key]["diag"]["internal"] = {
