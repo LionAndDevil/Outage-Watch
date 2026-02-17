@@ -539,7 +539,7 @@ def safe_run_group(state_key: str, group_name: str):
         # --- checkpoints to prove where it fails ---
         st.session_state[state_key]["diag"]["checkpoint_before_run"] = True
 
-        try:
+try:
     trig, chk, internal = run_crowd_signals_for_group(group_name)
 except Exception as e:
     # Make the failure unmissable in the JSON
