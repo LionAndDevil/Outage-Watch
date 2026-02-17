@@ -14,6 +14,9 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="Outage Watch", layout="wide")
 st.title("Outage Watch")
 
+# Build marker (helps confirm Streamlit is running the latest commit)
+st.caption("BUILD: 2026-02-17 internal-diag-v1")
+
 DEFAULT_TIMEOUT = 10
 
 # -----------------------
@@ -407,7 +410,7 @@ def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
             continue
     return None, [], None, None, last_err
 
-# --- FIXED/UPDATED: returns (triggered, checks, internal_diag) ---
+# --- FIXED: returns (triggered, checks, internal_diag) ---
 def run_crowd_signals_for_group(group_name: str):
     group_items = [s for s in CROWD_ALLOWLIST if s.get("group") == group_name]
     triggered = []
@@ -425,6 +428,7 @@ def run_crowd_signals_for_group(group_name: str):
 
         feed_url, entries, fetched_at, inst_used, err = fetch_crowd_feed_with_fallback(s["slug"], count=10)
 
+        # Always record the check (even if it errors), so the expander never stays empty
         checks.append({
             "name": s["name"],
             "slug": s["slug"],
@@ -534,7 +538,7 @@ def safe_run_group(state_key: str, group_name: str):
             )
             return
 
-        # --- FIXED: handle third return value + attach internal diag ---
+        # --- FIX: capture and display internal diag from the crowd function ---
         trig, chk, internal = run_crowd_signals_for_group(group_name)
         st.session_state[state_key]["diag"]["internal"] = internal
 
@@ -625,8 +629,8 @@ else:
             st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
             if chk["feed_url"]:
                 st.link_button("Open RSS feed", chk["feed_url"], key=f"pay_feed_{chk['slug']}")
-            if chk["error"]:
-                st.caption(f"Error: {chk['error']}")
+            if chk.get("error"):
+                st.caption(f"Error: {chk.get('error')}")
 
 st.divider()
 
