@@ -536,7 +536,9 @@ def safe_run_group(state_key: str, group_name: str):
             )
             return
 
+st.session_state[state_key]["diag"]["checkpoint_before_run"] = True        
         trig, chk, internal = run_crowd_signals_for_group(group_name)
+st.session_state[state_key]["diag"]["checkpoint_after_run"] = True
         st.session_state[state_key]["diag"]["internal"] = internal
 
         st.session_state[state_key]["triggered"] = trig
