@@ -411,6 +411,10 @@ def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
     return None, [], None, None, last_err
 
 def run_crowd_signals_for_group(group_name: str):
+    import time, traceback
+
+    t0 = time.time()
+
     group_items = [s for s in CROWD_ALLOWLIST if s.get("group") == group_name]
     triggered = []
     checks = []
@@ -420,61 +424,115 @@ def run_crowd_signals_for_group(group_name: str):
         "group_items_len": len(group_items),
         "entered_loop": False,
         "checks_len_end": 0,
+        "checkpoint_before_loop": True,
+        "checkpoint_after_loop": False,
+        "elapsed_ms": None,
+        "crash_error": "",
     }
 
-    for s in group_items:
-        internal_diag["entered_loop"] = True
+    try:
+        for s in group_items:
+            internal_diag["entered_loop"] = True
+            svc_t0 = time.time()
 
-        feed_url, entries, fetched_at, inst_used, err = fetch_crowd_feed_with_fallback(s["slug"], count=10)
+            # Pre-fill a check record so even early failures produce an entry
+            check = {
+                "name": s.get("name", ""),
+                "slug": s.get("slug", ""),
+                "threshold": s.get("threshold", None),
+                "feed_url": "",
+                "fetched_at": "",
+                "instance": "",
+                "ok": False,
+                "error": "",
+                "error_type": "",
+                "elapsed_ms": None,
+            }
 
-        checks.append({
-            "name": s["name"],
-            "slug": s["slug"],
-            "threshold": s["threshold"],
-            "feed_url": feed_url,
-            "fetched_at": fetched_at,
-            "instance": inst_used,
-            "ok": err is None,
-            "error": str(err) if err else "",
-        })
+            try:
+                feed_url, entries, fetched_at, inst_used, err = fetch_crowd_feed_with_fallback(
+                    s["slug"], count=10
+                )
 
-        if not entries:
-            continue
+                check.update({
+                    "feed_url": feed_url or "",
+                    "fetched_at": fetched_at or "",
+                    "instance": inst_used or "",
+                    "ok": err is None,
+                    "error": str(err) if err else "",
+                    "error_type": type(err).__name__ if err else "",
+                })
 
-        max_reports = None
-        best_title = None
-        best_time = None
+                # If fetch returned no entries (or errored), we still keep the check entry
+                if not entries:
+                    continue
 
-        for e in entries[:5]:
-            title = unescape(getattr(e, "title", "Update"))
-            t_lower = title.lower()
+                max_reports = None
+                best_title = None
+                best_time = None
 
-            m = re.search(r"(\d+)\s+reports?", t_lower) or re.search(r"reports?\s*[:\-]\s*(\d+)", t_lower)
-            if m:
-                n = int(m.group(1))
-                if max_reports is None or n > max_reports:
-                    max_reports = n
-                    best_title = title
-                    best_time = getattr(e, "published", "") or getattr(e, "updated", "")
-            elif best_title is None:
-                best_title = title
-                best_time = getattr(e, "published", "") or getattr(e, "updated", "")
+                for e in entries[:5]:
+                    # Be defensive about entry structure and title value
+                    raw_title = getattr(e, "title", None)
+                    title = unescape(raw_title) if isinstance(raw_title, str) else "Update"
+                    t_lower = title.lower()
 
-        if max_reports is not None and max_reports >= s["threshold"]:
-            triggered.append({
-                "name": s["name"],
-                "reports": max_reports,
-                "threshold": s["threshold"],
-                "title": best_title or "Crowd activity",
-                "time": best_time or "",
-                "source_link": f"https://outage.report/{s['slug'].strip('/')}",
-                "feed_url": feed_url or "",
-                "fetched_at": fetched_at or "",
-                "instance": inst_used or "",
-            })
+                    m = (
+                        re.search(r"(\d+)\s+reports?", t_lower)
+                        or re.search(r"reports?\s*[:\-]\s*(\d+)", t_lower)
+                    )
 
-    triggered.sort(key=lambda x: x["reports"], reverse=True)
-    internal_diag["checks_len_end"] = len(checks)
+                    if m:
+                        try:
+                            n = int(m.group(1))
+                        except Exception:
+                            # If parsing fails, ignore this entry and continue
+                            continue
+
+                        if max_reports is None or n > max_reports:
+                            max_reports = n
+                            best_title = title
+                            best_time = getattr(e, "published", "") or getattr(e, "updated", "")
+                    elif best_title is None:
+                        best_title = title
+                        best_time = getattr(e, "published", "") or getattr(e, "updated", "")
+
+                if max_reports is not None and check["threshold"] is not None and max_reports >= check["threshold"]:
+                    triggered.append({
+                        "name": check["name"],
+                        "reports": max_reports,
+                        "threshold": check["threshold"],
+                        "title": best_title or "Crowd activity",
+                        "time": best_time or "",
+                        "source_link": f"https://outage.report/{check['slug'].strip('/')}",
+                        "feed_url": check["feed_url"],
+                        "fetched_at": check["fetched_at"],
+                        "instance": check["instance"],
+                    })
+
+            except Exception as e:
+                # Per-service hard failure: still record a check entry
+                check["ok"] = False
+                check["error_type"] = type(e).__name__
+                check["error"] = str(e)[:300]
+                # Optional: keep a small tail of traceback for debugging
+                internal_diag["last_service_trace"] = traceback.format_exc()[-2000:]
+            finally:
+                check["elapsed_ms"] = int((time.time() - svc_t0) * 1000)
+                checks.append(check)
+
+        triggered.sort(key=lambda x: x.get("reports", 0), reverse=True)
+
+        internal_diag["checkpoint_after_loop"] = True
+        internal_diag["checks_len_end"] = len(checks)
+        internal_diag["elapsed_ms"] = int((time.time() - t0) * 1000)
+
+    except Exception:
+        # Truly unexpected failure outside per-service handling
+        internal_diag["crash_error"] = traceback.format_exc()[-4000:]
+        internal_diag["checks_len_end"] = len(checks)
+        internal_diag["elapsed_ms"] = int((time.time() - t0) * 1000)
+
     return triggered, checks, internal_diag
 
 def _now_utc_str():
