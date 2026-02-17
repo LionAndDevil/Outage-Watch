@@ -15,7 +15,7 @@ st.set_page_config(page_title="Outage Watch", layout="wide")
 st.title("Outage Watch")
 
 # Build marker (helps confirm Streamlit is running the latest commit)
-st.caption("BUILD: 2026-02-17 internal-diag-v1")
+st.caption("BUILD: 2026-02-17 internal-diag-v2")
 
 DEFAULT_TIMEOUT = 10
 
@@ -410,7 +410,6 @@ def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
             continue
     return None, [], None, None, last_err
 
-# --- FIXED: returns (triggered, checks, internal_diag) ---
 def run_crowd_signals_for_group(group_name: str):
     group_items = [s for s in CROWD_ALLOWLIST if s.get("group") == group_name]
     triggered = []
@@ -428,7 +427,6 @@ def run_crowd_signals_for_group(group_name: str):
 
         feed_url, entries, fetched_at, inst_used, err = fetch_crowd_feed_with_fallback(s["slug"], count=10)
 
-        # Always record the check (even if it errors), so the expander never stays empty
         checks.append({
             "name": s["name"],
             "slug": s["slug"],
@@ -477,7 +475,6 @@ def run_crowd_signals_for_group(group_name: str):
 
     triggered.sort(key=lambda x: x["reports"], reverse=True)
     internal_diag["checks_len_end"] = len(checks)
-
     return triggered, checks, internal_diag
 
 def _now_utc_str():
@@ -493,8 +490,6 @@ if "crowd_telecoms" not in st.session_state:
 
 # -----------------------
 # Auto-refresh behavior
-# - Refresh every 60s by default
-# - Pause auto-refresh after any crowd check so results stay visible
 # -----------------------
 disable_autorefresh = bool(st.session_state["crowd_payments"].get("ran")) or bool(st.session_state["crowd_telecoms"].get("ran"))
 
@@ -508,6 +503,9 @@ else:
     st.caption("Auto-refreshes every 60s; network responses cached for 60s.")
     st_autorefresh(interval=60_000, key="auto_refresh")
 
+# -----------------------
+# SAFE runner (indentation-safe + exception surfaced into JSON)
+# -----------------------
 def safe_run_group(state_key: str, group_name: str):
     st.session_state[state_key]["ran"] = True
     st.session_state[state_key]["ran_at"] = _now_utc_str()
@@ -546,7 +544,6 @@ def safe_run_group(state_key: str, group_name: str):
 
     except Exception as e:
         st.session_state[state_key]["error"] = str(e)
-        # Force the exception into the JSON so we can see what's breaking
         st.session_state[state_key]["diag"]["internal"] = {
             "exception": str(e),
             "note": "Exception occurred before checks could be stored."
@@ -629,13 +626,14 @@ else:
     with st.expander("Payments crowd feed checks (sources & last fetched)", expanded=False):
         if not cp["checks"]:
             st.info("No checks recorded (unexpected).")
-        for chk in cp["checks"]:
-            status_icon = "✅" if chk["ok"] else "⚠️"
-            st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
-            if chk["feed_url"]:
-                st.link_button("Open RSS feed", chk["feed_url"], key=f"pay_feed_{chk['slug']}")
-            if chk.get("error"):
-                st.caption(f"Error: {chk.get('error')}")
+        else:
+            for chk in cp["checks"]:
+                status_icon = "✅" if chk["ok"] else "⚠️"
+                st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
+                if chk["feed_url"]:
+                    st.link_button("Open RSS feed", chk["feed_url"], key=f"pay_feed_{chk['slug']}")
+                if chk.get("error"):
+                    st.caption(f"Error: {chk.get('error')}")
 
 st.divider()
 
@@ -670,13 +668,14 @@ else:
     with st.expander("Telecoms crowd feed checks (sources & last fetched)", expanded=False):
         if not ct["checks"]:
             st.info("No checks recorded (unexpected).")
-        for chk in ct["checks"]:
-            status_icon = "✅" if chk["ok"] else "⚠️"
-            st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
-            if chk["feed_url"]:
-                st.link_button("Open RSS feed", chk["feed_url"], key=f"tel_feed_{chk['slug']}")
-            if chk.get("error"):
-                st.caption(f"Error: {chk.get('error')}")
+        else:
+            for chk in ct["checks"]:
+                status_icon = "✅" if chk["ok"] else "⚠️"
+                st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
+                if chk["feed_url"]:
+                    st.link_button("Open RSS feed", chk["feed_url"], key=f"tel_feed_{chk['slug']}")
+                if chk.get("error"):
+                    st.caption(f"Error: {chk.get('error')}")
 
 st.divider()
 
