@@ -741,9 +741,16 @@ else:
                 status_icon = "✅" if chk["ok"] else "⚠️"
                 st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
                 feed_url = chk.get("feed_url")
-                slug = str(chk.get("slug", ""))
-                if isinstance(feed_url, str) and feed_url.strip():
-                    st.link_button("Open RSS feed", feed_url, key=f"pay_feed_{slug}")
+slug = str(chk.get("slug", ""))
+
+# Only render a link if it's a clean http(s) URL string
+if isinstance(feed_url, str):
+    feed_url = feed_url.strip()
+else:
+    feed_url = ""
+
+if feed_url.startswith("http://") or feed_url.startswith("https://"):
+    st.link_button("Open RSS feed", feed_url, key=f"pay_feed_{slug}")
                 if chk.get("error"):
                     st.caption(f"Error: {chk.get('error')}")
 
