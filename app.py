@@ -740,8 +740,10 @@ else:
             for chk in cp["checks"]:
                 status_icon = "✅" if chk["ok"] else "⚠️"
                 st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
-                if chk["feed_url"]:
-                    st.link_button("Open RSS feed", chk["feed_url"], key=f"pay_feed_{chk['slug']}")
+                                feed_url = chk.get("feed_url")
+                slug = str(chk.get("slug", ""))
+                if isinstance(feed_url, str) and feed_url.strip():
+                    st.link_button("Open RSS feed", feed_url, key=f"pay_feed_{slug}")
                 if chk.get("error"):
                     st.caption(f"Error: {chk.get('error')}")
 
