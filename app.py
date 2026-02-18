@@ -638,16 +638,29 @@ def safe_run_group(state_key: str, group_name: str):
         }
 
     finally:
-        # If we reached finally, the wrapper completed this run cycle
+        st.session_state[state_key].setdefault("diag", {})
         st.session_state[state_key]["diag"]["checkpoint_after_run"] = True
+        st.session_state[state_key]["diag"]["run_completed"] = True
+        st.session_state[state_key]["diag"]["run_failed"] = bool(st.session_state[state_key].get("error"))
 
-        # Defensive: if checks is still empty, record why (so the UI isn't mysterious)
+
         if not st.session_state[state_key].get("checks"):
+            err = st.session_state[state_key].get("error", "")
+            st.session_state[state_key]["checks"] = [{
+                "name": "(runner)",
+                "slug": "",
+                "threshold": "",
+                "feed_url": "",
+                "fetched_at": "",
+                "instance": "",
+                "ok": False,
+                "error": err or "No checks were recorded.",
+                "error_type": "RunnerError" if err else "NoChecks",
+            }]
             st.session_state[state_key]["diag"]["checks_empty_reason"] = (
-                "No checks were persisted to session_state. "
-                "Either group had zero items, or the run crashed before checks were recorded."
+                "No checks were persisted to session_state; inserted fallback runner check."
             )
-
+    
 # -----------------------
 # UI controls
 # -----------------------
