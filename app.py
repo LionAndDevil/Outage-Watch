@@ -740,8 +740,8 @@ else:
             for chk in cp["checks"]:
                 status_icon = "✅" if chk["ok"] else "⚠️"
                 st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
-                feed_url = chk.get("feed_url")
-                slug = str(chk.get("slug", ""))
+feed_url = chk.get("feed_url")
+slug = str(chk.get("slug", ""))
 
 # Only render a link if it's a clean http(s) URL string
 if isinstance(feed_url, str):
