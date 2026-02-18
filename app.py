@@ -6,7 +6,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
 
 # -----------------------
 # Page setup
