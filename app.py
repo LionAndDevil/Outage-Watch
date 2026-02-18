@@ -751,7 +751,7 @@ else:
 
 if feed_url.startswith("http://") or feed_url.startswith("https://"):
     st.link_button("Open RSS feed", feed_url, key=f"pay_feed_{slug}")
-                if chk.get("error"):
+if chk.get("error"):
                     st.caption(f"Error: {chk.get('error')}")
 
 st.divider()
