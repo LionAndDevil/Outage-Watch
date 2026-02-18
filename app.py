@@ -565,6 +565,18 @@ else:
 # SAFE runner (indentation-safe + checkpoints + run_exception + exception surfaced into JSON)
 # -----------------------
 def safe_run_group(state_key: str, group_name: str):
+    import traceback
+
+    # Ensure the state object exists and has the expected shape
+    st.session_state.setdefault(state_key, {})
+    st.session_state[state_key].setdefault("ran", False)
+    st.session_state[state_key].setdefault("ran_at", "")
+    st.session_state[state_key].setdefault("error", "")
+    st.session_state[state_key].setdefault("triggered", [])
+    st.session_state[state_key].setdefault("checks", [])
+    st.session_state[state_key].setdefault("diag", {})
+
+    # Initialize run state immediately (never rely on prior values)
     st.session_state[state_key]["ran"] = True
     st.session_state[state_key]["ran_at"] = _now_utc_str()
     st.session_state[state_key]["error"] = ""
@@ -572,11 +584,15 @@ def safe_run_group(state_key: str, group_name: str):
     st.session_state[state_key]["checks"] = []
     st.session_state[state_key]["diag"] = {}
 
+    # Always set before/after checkpoints in this wrapper
+    st.session_state[state_key]["diag"]["checkpoint_before_run"] = True
+    st.session_state[state_key]["diag"]["checkpoint_after_run"] = False
+
     try:
         seen_groups = sorted(set([str(s.get("group")) for s in CROWD_ALLOWLIST if isinstance(s, dict)]))
         group_items = [s for s in CROWD_ALLOWLIST if isinstance(s, dict) and s.get("group") == group_name]
 
-        st.session_state[state_key]["diag"] = {
+        st.session_state[state_key]["diag"].update({
             "group_name_requested": group_name,
             "allowlist_len": len(CROWD_ALLOWLIST),
             "unique_groups_seen": seen_groups,
@@ -585,7 +601,7 @@ def safe_run_group(state_key: str, group_name: str):
                 {"name": s.get("name"), "group": s.get("group"), "slug": s.get("slug")}
                 for s in group_items[:3]
             ],
-        }
+        })
 
         if len(group_items) == 0:
             st.session_state[state_key]["error"] = (
@@ -594,34 +610,43 @@ def safe_run_group(state_key: str, group_name: str):
             )
             return
 
-        st.session_state[state_key]["diag"]["checkpoint_before_run"] = True
-
         try:
             trig, chk, internal = run_crowd_signals_for_group(group_name)
+
+            # Persist results no matter what they contain
+            st.session_state[state_key]["triggered"] = trig or []
+            st.session_state[state_key]["checks"] = chk or []
+            st.session_state[state_key]["diag"]["internal"] = internal or {}
+
         except Exception as e:
             st.session_state[state_key]["error"] = str(e)
-            st.session_state[state_key]["diag"]["checkpoint_after_run"] = False
             st.session_state[state_key]["diag"]["run_exception"] = str(e)
+            st.session_state[state_key]["diag"]["run_trace"] = traceback.format_exc()[-4000:]
             st.session_state[state_key]["diag"]["internal"] = {
                 "exception": str(e),
                 "where": "run_crowd_signals_for_group",
-                "note": "Crash occurred after checkpoint_before_run, inside the crowd loop."
+                "note": "Exception raised during crowd group run."
             }
-            return
-
-        st.session_state[state_key]["diag"]["checkpoint_after_run"] = True
-        st.session_state[state_key]["diag"]["internal"] = internal
-
-        st.session_state[state_key]["triggered"] = trig
-        st.session_state[state_key]["checks"] = chk
 
     except Exception as e:
         st.session_state[state_key]["error"] = str(e)
+        st.session_state[state_key]["diag"]["safe_trace"] = traceback.format_exc()[-4000:]
         st.session_state[state_key]["diag"]["internal"] = {
             "exception": str(e),
             "where": "safe_run_group",
-            "note": "Crash occurred before/around setup, outside the crowd loop."
+            "note": "Exception raised in safe_run_group wrapper."
         }
+
+    finally:
+        # If we reached finally, the wrapper completed this run cycle
+        st.session_state[state_key]["diag"]["checkpoint_after_run"] = True
+
+        # Defensive: if checks is still empty, record why (so the UI isn't mysterious)
+        if not st.session_state[state_key].get("checks"):
+            st.session_state[state_key]["diag"]["checks_empty_reason"] = (
+                "No checks were persisted to session_state. "
+                "Either group had zero items, or the run crashed before checks were recorded."
+            )
 
 # -----------------------
 # UI controls
