@@ -558,7 +558,6 @@ if disable_autorefresh:
         st.rerun()
 else:
     st.caption("Auto-refreshes every 60s; network responses cached for 60s.")
-    st_autorefresh(interval=60_000, key="auto_refresh")
 
 # -----------------------
 # SAFE runner (indentation-safe + checkpoints + run_exception + exception surfaced into JSON)
