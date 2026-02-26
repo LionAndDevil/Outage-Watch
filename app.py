@@ -41,11 +41,13 @@ RSSHUB_INSTANCES = [
 ]
 RSSHUB_OUTAGEREPORT_PATH_TEMPLATE = "/outagereport/{slug}/{count}"
 
+
 def _telco_threshold(name: str) -> int:
     n = name.lower()
     if any(x in n for x in ["verizon", "t-mobile", "at&t", "o2", "ee", "bt", "vodafone uk", "virgin media"]):
         return 35
     return 30
+
 
 # Tag each crowd item with a group: "payments" or "telecoms"
 CROWD_ALLOWLIST = [
@@ -137,6 +139,7 @@ def fetch_url_with_time(url: str, timeout: int = DEFAULT_TIMEOUT):
     fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     return r.content, fetched_at
 
+
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_json(url: str):
     raw, _ = fetch_url_with_time(url)
@@ -147,6 +150,7 @@ def fetch_json(url: str):
 # -----------------------
 severity_order = {"major": 0, "degraded": 1, "unknown": 2, "info": 3, "ok": 4}
 emoji = {"ok": "✅", "degraded": "🟡", "major": "🔴", "unknown": "⚪", "info": "🔵"}
+
 
 def _rss_level_from_title(title_lower: str) -> str:
     major_words = ["major outage", "outage", "unavailable", "down"]
@@ -164,6 +168,21 @@ def _rss_level_from_title(title_lower: str) -> str:
     if any(w in title_lower for w in degraded_words):
         return "degraded"
     return "ok"
+
+
+def _safe_http_url(val) -> str:
+    """Return a clean http(s) URL string or ''."""
+    if not isinstance(val, str):
+        return ""
+    v = val.strip()
+    if v.startswith("http://") or v.startswith("https://"):
+        return v
+    return ""
+
+
+def _safe_key_suffix(val) -> str:
+    """Streamlit keys must be strings; keep it simple."""
+    return str(val) if val is not None else ""
 
 # -----------------------
 # Official summarizers
@@ -189,6 +208,7 @@ def summarize_statuspage(url):
         details.append(f"{title} — impact: {impact} — updated: {upd}")
     return level, details
 
+
 def summarize_statuspage_try(base_url: str):
     tried = []
     for endpoint in ["/api/v2/summary.json", "/api/v2/status.json"]:
@@ -211,6 +231,7 @@ def summarize_statuspage_try(base_url: str):
         return "info", ["Fetched JSON but format was unexpected; see official status page."]
 
     return "info", [f"No public JSON endpoints responded ({', '.join(tried)})."]
+
 
 def summarize_rss(url):
     try:
@@ -244,6 +265,7 @@ def summarize_rss(url):
 
     return level, details[:3]
 
+
 def summarize_gcp_incidents(url):
     try:
         incidents = fetch_json(url)
@@ -268,6 +290,7 @@ def summarize_gcp_incidents(url):
         details.append(f"{title} — started: {begin} — severity/impact: {severity or 'n/a'}")
 
     return level, details
+
 
 def summarize_google_workspace_incidents(url):
     try:
@@ -296,6 +319,7 @@ def summarize_google_workspace_incidents(url):
 
     return level, details
 
+
 def summarize_stripe_json(url):
     try:
         data = fetch_json(url)
@@ -316,6 +340,7 @@ def summarize_stripe_json(url):
         return "degraded", ["See official Stripe status page for details."]
     return "ok", []
 
+
 def summarize_statuspage_html(url):
     try:
         html, _ = fetch_url_with_time(url)
@@ -332,6 +357,7 @@ def summarize_statuspage_html(url):
     if "all systems operational" in top or "all services are operational" in top:
         return "ok", []
     return "unknown", ["See official status page for details."]
+
 
 def summarize_mastercard_dev_html(url):
     try:
@@ -354,8 +380,10 @@ def summarize_mastercard_dev_html(url):
 
     return "info", ["Unable to classify from page text; see official status page."]
 
+
 def summarize_link_only(provider):
     return "info", [provider.get("note") or "See official status page."]
+
 
 def summarize(provider):
     kind = provider["kind"]
@@ -388,6 +416,7 @@ def summarize(provider):
 def build_outagereport_feed_url(instance: str, slug: str, count: int) -> str:
     return instance.rstrip("/") + RSSHUB_OUTAGEREPORT_PATH_TEMPLATE.format(slug=slug.strip("/"), count=count)
 
+
 def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
     last_err = None
     for inst in RSSHUB_INSTANCES:
@@ -408,6 +437,7 @@ def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
             last_err = e
             continue
     return None, [], None, None, last_err
+
 
 def run_crowd_signals_for_group(group_name: str):
     import time, traceback
@@ -434,7 +464,6 @@ def run_crowd_signals_for_group(group_name: str):
             internal_diag["entered_loop"] = True
             svc_t0 = time.time()
 
-            # Pre-fill a check record so even early failures produce an entry
             check = {
                 "name": s.get("name", ""),
                 "slug": s.get("slug", ""),
@@ -453,16 +482,14 @@ def run_crowd_signals_for_group(group_name: str):
                     s["slug"], count=10
                 )
 
-                check.update({
-                    "feed_url": feed_url or "",
-                    "fetched_at": fetched_at or "",
-                    "instance": inst_used or "",
-                    "ok": err is None,
-                    "error": str(err) if err else "",
-                    "error_type": type(err).__name__ if err else "",
-                })
+                # Normalize to strings (UI expects strings)
+                check["feed_url"] = feed_url if isinstance(feed_url, str) else ""
+                check["fetched_at"] = fetched_at or ""
+                check["instance"] = inst_used or ""
+                check["ok"] = err is None
+                check["error"] = str(err) if err else ""
+                check["error_type"] = type(err).__name__ if err else ""
 
-                # If fetch returned no entries (or errored), we still keep the check entry
                 if not entries:
                     continue
 
@@ -471,7 +498,6 @@ def run_crowd_signals_for_group(group_name: str):
                 best_time = None
 
                 for e in entries[:5]:
-                    # Be defensive about entry structure and title value
                     raw_title = getattr(e, "title", None)
                     title = unescape(raw_title) if isinstance(raw_title, str) else "Update"
                     t_lower = title.lower()
@@ -485,7 +511,6 @@ def run_crowd_signals_for_group(group_name: str):
                         try:
                             n = int(m.group(1))
                         except Exception:
-                            # If parsing fails, ignore this entry and continue
                             continue
 
                         if max_reports is None or n > max_reports:
@@ -496,11 +521,12 @@ def run_crowd_signals_for_group(group_name: str):
                         best_title = title
                         best_time = getattr(e, "published", "") or getattr(e, "updated", "")
 
-                if max_reports is not None and check["threshold"] is not None and max_reports >= check["threshold"]:
+                threshold = check["threshold"]
+                if max_reports is not None and threshold is not None and max_reports >= threshold:
                     triggered.append({
                         "name": check["name"],
                         "reports": max_reports,
-                        "threshold": check["threshold"],
+                        "threshold": threshold,
                         "title": best_title or "Crowd activity",
                         "time": best_time or "",
                         "source_link": f"https://outage.report/{check['slug'].strip('/')}",
@@ -510,12 +536,11 @@ def run_crowd_signals_for_group(group_name: str):
                     })
 
             except Exception as e:
-                # Per-service hard failure: still record a check entry
                 check["ok"] = False
                 check["error_type"] = type(e).__name__
                 check["error"] = str(e)[:300]
-                # Optional: keep a small tail of traceback for debugging
                 internal_diag["last_service_trace"] = traceback.format_exc()[-2000:]
+
             finally:
                 check["elapsed_ms"] = int((time.time() - svc_t0) * 1000)
                 checks.append(check)
@@ -527,12 +552,12 @@ def run_crowd_signals_for_group(group_name: str):
         internal_diag["elapsed_ms"] = int((time.time() - t0) * 1000)
 
     except Exception:
-        # Truly unexpected failure outside per-service handling
         internal_diag["crash_error"] = traceback.format_exc()[-4000:]
         internal_diag["checks_len_end"] = len(checks)
         internal_diag["elapsed_ms"] = int((time.time() - t0) * 1000)
 
     return triggered, checks, internal_diag
+
 
 def _now_utc_str():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -546,7 +571,7 @@ if "crowd_telecoms" not in st.session_state:
     st.session_state["crowd_telecoms"] = {"ran": False, "ran_at": "", "triggered": [], "checks": [], "error": "", "diag": {}}
 
 # -----------------------
-# Auto-refresh behavior
+# Auto-refresh behavior (no component dependency)
 # -----------------------
 disable_autorefresh = bool(st.session_state["crowd_payments"].get("ran")) or bool(st.session_state["crowd_telecoms"].get("ran"))
 
@@ -560,7 +585,7 @@ else:
     st.caption("Auto-refreshes every 60s; network responses cached for 60s.")
 
 # -----------------------
-# SAFE runner (indentation-safe + checkpoints + run_exception + exception surfaced into JSON)
+# SAFE runner (checkpoints + run_exception + tracebacks + guaranteed after-run)
 # -----------------------
 def safe_run_group(state_key: str, group_name: str):
     import traceback
@@ -611,7 +636,6 @@ def safe_run_group(state_key: str, group_name: str):
         try:
             trig, chk, internal = run_crowd_signals_for_group(group_name)
 
-            # Persist results no matter what they contain
             st.session_state[state_key]["triggered"] = trig or []
             st.session_state[state_key]["checks"] = chk or []
             st.session_state[state_key]["diag"]["internal"] = internal or {}
@@ -641,7 +665,7 @@ def safe_run_group(state_key: str, group_name: str):
         st.session_state[state_key]["diag"]["run_completed"] = True
         st.session_state[state_key]["diag"]["run_failed"] = bool(st.session_state[state_key].get("error"))
 
-
+        # Ensure UI expander never hits "unexpected empty"
         if not st.session_state[state_key].get("checks"):
             err = st.session_state[state_key].get("error", "")
             st.session_state[state_key]["checks"] = [{
@@ -658,7 +682,7 @@ def safe_run_group(state_key: str, group_name: str):
             st.session_state[state_key]["diag"]["checks_empty_reason"] = (
                 "No checks were persisted to session_state; inserted fallback runner check."
             )
-    
+
 # -----------------------
 # UI controls
 # -----------------------
@@ -729,29 +753,25 @@ else:
                 if c["fetched_at"]:
                     st.write(f"• Last fetched: {c['fetched_at']} (via {c['instance']})")
             with cols[1]:
-                st.link_button("Open crowd-signal source", c["source_link"], key=f"pay_src_{c['name']}")
-                if c["feed_url"]:
-                    st.link_button("Open RSS feed", c["feed_url"], key=f"pay_rss_{c['name']}")
+                st.link_button("Open crowd-signal source", c["source_link"], key=f"pay_src_{_safe_key_suffix(c['name'])}")
+                rss = _safe_http_url(c.get("feed_url", ""))
+                if rss:
+                    st.link_button("Open RSS feed", rss, key=f"pay_rss_{_safe_key_suffix(c['name'])}")
 
     with st.expander("Payments crowd feed checks (sources & last fetched)", expanded=False):
         if not cp["checks"]:
             st.info("No checks recorded (unexpected).")
         else:
             for chk in cp["checks"]:
-                status_icon = "✅" if chk["ok"] else "⚠️"
-                st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
-feed_url = chk.get("feed_url")
-slug = str(chk.get("slug", ""))
+                status_icon = "✅" if chk.get("ok") else "⚠️"
+                st.write(f"{status_icon} {chk.get('name','')} — threshold ≥{chk.get('threshold','')}")
 
-# Only render a link if it's a clean http(s) URL string
-if isinstance(feed_url, str):
-    feed_url = feed_url.strip()
-else:
-    feed_url = ""
+                feed_url = _safe_http_url(chk.get("feed_url", ""))
+                slug = _safe_key_suffix(chk.get("slug", ""))
+                if feed_url:
+                    st.link_button("Open RSS feed", feed_url, key=f"pay_feed_{slug}")
 
-if feed_url.startswith("http://") or feed_url.startswith("https://"):
-    st.link_button("Open RSS feed", feed_url, key=f"pay_feed_{slug}")
-if chk.get("error"):
+                if chk.get("error"):
                     st.caption(f"Error: {chk.get('error')}")
 
 st.divider()
@@ -780,19 +800,24 @@ else:
                 if c["fetched_at"]:
                     st.write(f"• Last fetched: {c['fetched_at']} (via {c['instance']})")
             with cols[1]:
-                st.link_button("Open crowd-signal source", c["source_link"], key=f"tel_src_{c['name']}")
-                if c["feed_url"]:
-                    st.link_button("Open RSS feed", c["feed_url"], key=f"tel_rss_{c['name']}")
+                st.link_button("Open crowd-signal source", c["source_link"], key=f"tel_src_{_safe_key_suffix(c['name'])}")
+                rss = _safe_http_url(c.get("feed_url", ""))
+                if rss:
+                    st.link_button("Open RSS feed", rss, key=f"tel_rss_{_safe_key_suffix(c['name'])}")
 
     with st.expander("Telecoms crowd feed checks (sources & last fetched)", expanded=False):
         if not ct["checks"]:
             st.info("No checks recorded (unexpected).")
         else:
             for chk in ct["checks"]:
-                status_icon = "✅" if chk["ok"] else "⚠️"
-                st.write(f"{status_icon} {chk['name']} — threshold ≥{chk['threshold']}")
-                if chk["feed_url"]:
-                    st.link_button("Open RSS feed", chk["feed_url"], key=f"tel_feed_{chk['slug']}")
+                status_icon = "✅" if chk.get("ok") else "⚠️"
+                st.write(f"{status_icon} {chk.get('name','')} — threshold ≥{chk.get('threshold','')}")
+
+                feed_url = _safe_http_url(chk.get("feed_url", ""))
+                slug = _safe_key_suffix(chk.get("slug", ""))
+                if feed_url:
+                    st.link_button("Open RSS feed", feed_url, key=f"tel_feed_{slug}")
+
                 if chk.get("error"):
                     st.caption(f"Error: {chk.get('error')}")
 
