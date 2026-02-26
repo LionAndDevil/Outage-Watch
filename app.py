@@ -766,10 +766,16 @@ else:
                 status_icon = "✅" if chk.get("ok") else "⚠️"
                 st.write(f"{status_icon} {chk.get('name','')} — threshold ≥{chk.get('threshold','')}")
 
-                feed_url = _safe_http_url(chk.get("feed_url", ""))
-                slug = _safe_key_suffix(chk.get("slug", ""))
-                if feed_url:
-                    st.link_button("Open RSS feed", feed_url, key=f"pay_feed_{slug}")
+                raw = chk.get("feed_url", "")
+                slug = str(chk.get("slug", ""))
+
+                if isinstance(raw, str):
+                    url = raw.strip()
+                else:
+                    url = ""
+
+                if url.startswith("http://") or url.startswith("https://"):
+                    st.link_button("Open RSS feed", url, key=f"pay_feed_{slug}")
 
                 if chk.get("error"):
                     st.caption(f"Error: {chk.get('error')}")
@@ -807,10 +813,16 @@ else:
 
     with st.expander("Telecoms crowd feed checks (sources & last fetched)", expanded=False):
         if not ct["checks"]:
-            st.info("No checks recorded (unexpected).")
-        else:
-            for chk in ct["checks"]:
-                status_icon = "✅" if chk.get("ok") else "⚠️"
+                raw = chk.get("feed_url", "")
+                slug = str(chk.get("slug", ""))
+
+                if isinstance(raw, str):
+                    url = raw.strip()
+                else:
+                    url = ""
+
+                if url.startswith("http://") or url.startswith("https://"):
+                    st.link_button("Open RSS feed", url, key=f"tel_feed_{slug}")
                 st.write(f"{status_icon} {chk.get('name','')} — threshold ≥{chk.get('threshold','')}")
 
                 feed_url = _safe_http_url(chk.get("feed_url", ""))
