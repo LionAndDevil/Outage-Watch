@@ -731,12 +731,21 @@ if run_telecoms:
 
 # Render results (Payments)
 st.markdown("### Crowd results: Payments & Banks")
+
+show_debug_payments = st.checkbox(
+    "Show diagnostics (Payments)",
+    value=False,
+    key="debug_payments"
+)
+
 cp = st.session_state["crowd_payments"]
+
 if not cp["ran"]:
     st.info("Not run yet. Click **Run crowd check: Payments & Banks**.")
 else:
     st.caption(f"Last run: {cp['ran_at']}")
-    if show_debug and cp.get("diag"):
+
+    if show_debug_payments and cp.get("diag"):
         with st.expander("Diagnostics (Payments)", expanded=False):
             st.json(cp["diag"])
     if cp["error"]:
