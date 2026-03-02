@@ -736,8 +736,9 @@ if not cp["ran"]:
     st.info("Not run yet. Click **Run crowd check: Payments & Banks**.")
 else:
     st.caption(f"Last run: {cp['ran_at']}")
-    if cp.get("diag"):
-        st.json(cp["diag"])
+    if show_debug and cp.get("diag"):
+        with st.expander("Diagnostics (Payments)", expanded=False):
+            st.json(cp["diag"])
     if cp["error"]:
         st.error(f"Payments crowd check error: {cp['error']}")
     if not cp["triggered"]:
