@@ -775,8 +775,11 @@ else:
                     url = ""
 
                 if url.startswith("http://") or url.startswith("https://"):
-                    st.link_button("Open RSS feed", url, key=f"pay_feed_{slug}")
-
+                    st.link_button(
+                        "Open RSS feed",
+                        url,
+                        key=f"pay_rss_{_safe_key_suffix(chk.get('slug',''))}"
+                        )
                 if chk.get("error"):
                     st.caption(f"Error: {chk.get('error')}")
 
