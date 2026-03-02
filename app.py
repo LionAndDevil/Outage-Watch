@@ -784,7 +784,7 @@ else:
                     except Exception as e:
                         st.caption(f"RSS render error: {e}")
                         if chk.get("error"):
-                        st.caption(f"Error: {chk.get('error')}")
+                            st.caption(f"Error: {chk.get('error')}")
 # --- End RSS rendering ---
 
 if safe_url.startswith(("http://", "https://")) and len(safe_url) > 10:
