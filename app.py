@@ -774,12 +774,20 @@ else:
                 else:
                     url = ""
 
-                if url.startswith("http://") or url.startswith("https://"):
-                    st.link_button(
-                        "Open RSS feed",
-                        url,
-                        key=f"pay_rss_{_safe_key_suffix(chk.get('slug',''))}"
-                        )
+                if isinstance(url, str):
+    safe_url = url.strip()
+else:
+    safe_url = ""
+
+if safe_url.startswith(("http://", "https://")) and len(safe_url) > 10:
+    try:
+        st.link_button(
+            "Open RSS feed",
+            safe_url,
+            key=f"pay_rss_{_safe_key_suffix(chk.get('slug',''))}"
+        )
+    except Exception as e:
+        st.caption(f"RSS render error: {e}")
                 if chk.get("error"):
                     st.caption(f"Error: {chk.get('error')}")
 
