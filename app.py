@@ -775,9 +775,9 @@ else:
                     url = ""
 
                 if isinstance(url, str):
-    safe_url = url.strip()
-else:
-    safe_url = ""
+                    safe_url = url.strip()
+                else:
+                    safe_url = ""
 
 if safe_url.startswith(("http://", "https://")) and len(safe_url) > 10:
     try:
