@@ -772,7 +772,7 @@ else:
                 feed_val = chk.get("feed_url")
 
                 if isinstance(feed_val, str):
-                safe_url = feed_val.strip()
+                    safe_url = feed_val.strip()
 
                 if safe_url.startswith(("http://", "https://")) and len(safe_url) > 10:
                     try:
