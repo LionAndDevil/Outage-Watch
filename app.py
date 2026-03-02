@@ -766,18 +766,26 @@ else:
                 status_icon = "✅" if chk.get("ok") else "⚠️"
                 st.write(f"{status_icon} {chk.get('name','')} — threshold ≥{chk.get('threshold','')}")
 
-                raw = chk.get("feed_url", "")
-                slug = str(chk.get("slug", ""))
+                # --- Safe RSS rendering ---
+safe_url = ""
 
-                if isinstance(raw, str):
-                    url = raw.strip()
-                else:
-                    url = ""
+feed_val = chk.get("feed_url")
 
-                if isinstance(url, str):
-                    safe_url = url.strip()
-                else:
-                    safe_url = ""
+if isinstance(feed_val, str):
+    safe_url = feed_val.strip()
+
+if safe_url.startswith(("http://", "https://")) and len(safe_url) > 10:
+    try:
+        st.link_button(
+            "Open RSS feed",
+            safe_url,
+            key=f"pay_rss_{_safe_key_suffix(chk.get('slug',''))}"
+        )
+    except Exception as e:
+        st.caption(f"RSS render error: {e}")
+        if chk.get("error"):
+            st.caption(f"Error: {chk.get('error')}")
+# --- End RSS rendering ---
 
 if safe_url.startswith(("http://", "https://")) and len(safe_url) > 10:
     try:
