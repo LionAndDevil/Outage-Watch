@@ -801,16 +801,19 @@ st.divider()
 
 # Render results (Telecoms)
 st.markdown("### Crowd results: Telecoms")
-ct = st.session_state["crowd_telecoms"]
-if not ct["ran"]:
-    st.info("Not run yet. Click **Run crowd check: Telecoms**.")
-else:
-    st.caption(f"Last run: {ct['ran_at']}")
-    show_debug_telecoms = st.checkbox(
+
+show_debug_telecoms = st.checkbox(
     "Show diagnostics (Telecoms)",
     value=False,
     key="debug_telecoms"
 )
+
+ct = st.session_state["crowd_telecoms"]
+
+if not ct["ran"]:
+    st.info("Not run yet. Click **Run crowd check: Telecoms**.")
+else:
+    st.caption(f"Last run: {ct['ran_at']}")
 
 if show_debug_telecoms and ct.get("diag"):
     with st.expander("Diagnostics (Telecoms)", expanded=False):
