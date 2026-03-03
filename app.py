@@ -709,11 +709,11 @@ def render_crowd_results(state_key: str, label: str, debug_key: str, prefix: str
         elapsed_ms = state["diag"]["internal"]["elapsed_ms"]
         service_count = state["diag"]["internal"].get("group_items_len", 0)
         triggered_count = len(state.get("triggered", []))
-        st.caption(
-            f"Checked {service_count} services in {round(elapsed_ms/1000,1)} seconds — "
-            f"{triggered_count} above threshold"
-        )
 
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Services checked", service_count)
+        col2.metric("Runtime (seconds)", round(elapsed_ms / 1000, 1))
+        col3.metric("Above threshold", triggered_count)
     if show_debug and state.get("diag"):
         with st.expander(f"Diagnostics ({label})", expanded=False):
             st.json(state["diag"])
