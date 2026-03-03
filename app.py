@@ -18,7 +18,7 @@ st.caption("BUILD: 2026-02-17 internal-diag-v4-run-exception")
 
 DEFAULT_TIMEOUT = 10
 CROWD_TIMEOUT = 6  # shorter timeout for crowd RSS
-MAX_WORKERS = 6  # parallel crowd fetch workers
+MAX_WORKERS = 8  # parallel crowd fetch workers
 
 # -----------------------
 # Crowd signals (Option A) - On demand checks (two groups)
