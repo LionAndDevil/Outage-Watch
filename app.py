@@ -784,13 +784,26 @@ with st.expander("What is monitored (by group)", expanded=False):
     st.markdown("**Telecoms**")
     st.caption(", ".join([f"{s['name']} (≥{s['threshold']})" for s in telecom_items]) or "(none)")
 
-b1, b2, b3 = st.columns([2, 2, 6])
-with b1:
-    run_payments = st.button("Run crowd check: Payments & Banks", use_container_width=True, key="btn_payments")
-with b2:
-    run_telecoms = st.button("Run crowd check: Telecoms", use_container_width=True, key="btn_telecoms")
-with b3:
-    st.caption("Crowd checks do not run automatically; use the buttons to fetch crowd signals.")
+with st.container():
+    st.markdown("#### Run crowd checks")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        run_payments = st.button(
+            "Run Payments & Banks",
+            use_container_width=True,
+            key="btn_payments"
+        )
+
+    with col2:
+        run_telecoms = st.button(
+            "Run Telecoms",
+            use_container_width=True,
+            key="btn_telecoms"
+        )
+
+    st.caption("Crowd checks run on demand.")
 
 if run_payments:
     with st.spinner("Running crowd check (Payments & Banks)…"):
@@ -800,21 +813,23 @@ if run_telecoms:
     with st.spinner("Running crowd check (Telecoms)…"):
         safe_run_group("crowd_telecoms", "telecoms")
 
-render_crowd_results(
-    state_key="crowd_payments",
-    label="Payments & Banks",
-    debug_key="debug_payments",
-    prefix="pay"
-)
+with st.container():
+    render_crowd_results(
+        state_key="crowd_payments",
+        label="Payments & Banks",
+        debug_key="debug_payments",
+        prefix="pay"
+    )
 
 st.divider()
 
-render_crowd_results(
-    state_key="crowd_telecoms",
-    label="Telecoms",
-    debug_key="debug_telecoms",
-    prefix="tel"
-)
+with st.container():
+    render_crowd_results(
+        state_key="crowd_telecoms",
+        label="Telecoms",
+        debug_key="debug_telecoms",
+        prefix="tel"
+    )
 # -----------------------
 # Poll official providers in parallel
 # -----------------------
