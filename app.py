@@ -806,7 +806,14 @@ if not ct["ran"]:
     st.info("Not run yet. Click **Run crowd check: Telecoms**.")
 else:
     st.caption(f"Last run: {ct['ran_at']}")
-    if ct.get("diag"):
+    show_debug_telecoms = st.checkbox(
+    "Show diagnostics (Telecoms)",
+    value=False,
+    key="debug_telecoms"
+)
+
+if show_debug_telecoms and ct.get("diag"):
+    with st.expander("Diagnostics (Telecoms)", expanded=False):
         st.json(ct["diag"])
     if ct["error"]:
         st.error(f"Telecoms crowd check error: {ct['error']}")
@@ -830,27 +837,32 @@ else:
 
     with st.expander("Telecoms crowd feed checks (sources & last fetched)", expanded=False):
         if not ct["checks"]:
-                raw = chk.get("feed_url", "")
-                slug = str(chk.get("slug", ""))
+        st.info("No telecom checks recorded (unexpected).")
+        else:
+            for chk in ct["checks"]:
+            status_icon = "✅" if chk.get("ok") else "⚠️"
+            st.write(f"{status_icon} {chk.get('name','')} — threshold ≥{chk.get('threshold','')}")
 
-                if isinstance(raw, str):
-                    url = raw.strip()
-                else:
-                    url = ""
+            # --- Safe RSS rendering ---
+            safe_url = ""
+            feed_val = chk.get("feed_url")
 
-                if url.startswith("http://") or url.startswith("https://"):
-                    st.link_button("Open RSS feed", url, key=f"tel_feed_{slug}")
-                st.write(f"{status_icon} {chk.get('name','')} — threshold ≥{chk.get('threshold','')}")
+            if isinstance(feed_val, str):
+                safe_url = feed_val.strip()
 
-                feed_url = _safe_http_url(chk.get("feed_url", ""))
-                slug = _safe_key_suffix(chk.get("slug", ""))
-                if feed_url:
-                    st.link_button("Open RSS feed", feed_url, key=f"tel_feed_{slug}")
+            if safe_url.startswith(("http://", "https://")) and len(safe_url) > 10:
+                try:
+                    st.link_button(
+                        "Open RSS feed",
+                        safe_url,
+                        key=f"tel_rss_{_safe_key_suffix(chk.get('slug',''))}"
+                    )
+                except Exception as e:
+                    st.caption(f"RSS render error: {e}")
+                    if chk.get("error"):
+                        st.caption(f"Error: {chk.get('error')}")
 
-                if chk.get("error"):
-                    st.caption(f"Error: {chk.get('error')}")
-
-st.divider()
+            st.divider()
 
 # -----------------------
 # Poll official providers in parallel
