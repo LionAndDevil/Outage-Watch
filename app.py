@@ -749,6 +749,14 @@ if not cp["ran"]:
     st.info("Not run yet. Click **Run crowd check: Payments & Banks**.")
 else:
     st.caption(f"Last run: {cp['ran_at']}")
+    if cp.get("diag", {}).get("internal", {}).get("elapsed_ms") is not None:
+    elapsed_ms = cp["diag"]["internal"]["elapsed_ms"]
+    service_count = cp["diag"]["internal"].get("group_items_len", 0)
+    triggered_count = len(cp.get("triggered", []))
+    st.caption(
+        f"Checked {service_count} services in {round(elapsed_ms/1000,1)} seconds — "
+        f"{triggered_count} above threshold"
+    )
 
     if show_debug_payments and cp.get("diag"):
         with st.expander("Diagnostics (Payments)", expanded=False):
@@ -819,6 +827,14 @@ if not ct["ran"]:
     st.info("Not run yet. Click **Run crowd check: Telecoms**.")
 else:
     st.caption(f"Last run: {ct['ran_at']}")
+    if ct.get("diag", {}).get("internal", {}).get("elapsed_ms") is not None:
+    elapsed_ms = ct["diag"]["internal"]["elapsed_ms"]
+    service_count = ct["diag"]["internal"].get("group_items_len", 0)
+    triggered_count = len(ct.get("triggered", []))
+    st.caption(
+        f"Checked {service_count} services in {round(elapsed_ms/1000,1)} seconds — "
+        f"{triggered_count} above threshold"
+    )
 
 if show_debug_telecoms and ct.get("diag"):
     with st.expander("Diagnostics (Telecoms)", expanded=False):
