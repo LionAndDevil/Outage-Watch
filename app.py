@@ -18,6 +18,7 @@ st.caption("BUILD: 2026-02-17 internal-diag-v4-run-exception")
 
 DEFAULT_TIMEOUT = 10
 CROWD_TIMEOUT = 6  # shorter timeout for crowd RSS
+MAX_WORKERS = 6  # parallel crowd fetch workers
 
 # -----------------------
 # Crowd signals (Option A) - On demand checks (two groups)
@@ -462,90 +463,92 @@ def run_crowd_signals_for_group(group_name: str):
     }
 
     try:
-        for s in group_items:
-            internal_diag["entered_loop"] = True
-            svc_t0 = time.time()
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-            check = {
-                "name": s.get("name", ""),
-                "slug": s.get("slug", ""),
-                "threshold": s.get("threshold", None),
-                "feed_url": "",
-                "fetched_at": "",
-                "instance": "",
-                "ok": False,
-                "error": "",
-                "error_type": "",
-                "elapsed_ms": None,
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            future_map = {
+                executor.submit(fetch_crowd_feed_with_fallback, s["slug"], 10): s
+                for s in group_items
             }
 
-            try:
-                feed_url, entries, fetched_at, inst_used, err = fetch_crowd_feed_with_fallback(
-                    s["slug"], count=10
-                )
+            for future in as_completed(future_map):
+                s = future_map[future]
+                svc_t0 = time.time()
 
-                # Normalize to strings (UI expects strings)
-                check["feed_url"] = feed_url if isinstance(feed_url, str) else ""
-                check["fetched_at"] = fetched_at or ""
-                check["instance"] = inst_used or ""
-                check["ok"] = err is None
-                check["error"] = str(err) if err else ""
-                check["error_type"] = type(err).__name__ if err else ""
+                check = {
+                    "name": s.get("name", ""),
+                    "slug": s.get("slug", ""),
+                    "threshold": s.get("threshold", None),
+                    "feed_url": "",
+                    "fetched_at": "",
+                    "instance": "",
+                    "ok": False,
+                    "error": "",
+                    "error_type": "",
+                    "elapsed_ms": None,
+                }
 
-                if not entries:
-                    continue
+                try:
+                    feed_url, entries, fetched_at, inst_used, err = future.result()
 
-                max_reports = None
-                best_title = None
-                best_time = None
+                    check["feed_url"] = feed_url if isinstance(feed_url, str) else ""
+                    check["fetched_at"] = fetched_at or ""
+                    check["instance"] = inst_used or ""
+                    check["ok"] = err is None
+                    check["error"] = str(err) if err else ""
+                    check["error_type"] = type(err).__name__ if err else ""
 
-                for e in entries[:5]:
-                    raw_title = getattr(e, "title", None)
-                    title = unescape(raw_title) if isinstance(raw_title, str) else "Update"
-                    t_lower = title.lower()
+                    if entries:
+                        max_reports = None
+                        best_title = None
+                        best_time = None
 
-                    m = (
-                        re.search(r"(\d+)\s+reports?", t_lower)
-                        or re.search(r"reports?\s*[:\-]\s*(\d+)", t_lower)
-                    )
+                        for e in entries[:5]:
+                            raw_title = getattr(e, "title", None)
+                            title = unescape(raw_title) if isinstance(raw_title, str) else "Update"
+                            t_lower = title.lower()
 
-                    if m:
-                        try:
-                            n = int(m.group(1))
-                        except Exception:
-                            continue
+                            m = (
+                                re.search(r"(\d+)\s+reports?", t_lower)
+                                or re.search(r"reports?\s*[:\-]\s*(\d+)", t_lower)
+                            )
 
-                        if max_reports is None or n > max_reports:
-                            max_reports = n
-                            best_title = title
-                            best_time = getattr(e, "published", "") or getattr(e, "updated", "")
-                    elif best_title is None:
-                        best_title = title
-                        best_time = getattr(e, "published", "") or getattr(e, "updated", "")
+                            if m:
+                                try:
+                                    n = int(m.group(1))
+                                except Exception:
+                                    continue
 
-                threshold = check["threshold"]
-                if max_reports is not None and threshold is not None and max_reports >= threshold:
-                    triggered.append({
-                        "name": check["name"],
-                        "reports": max_reports,
-                        "threshold": threshold,
-                        "title": best_title or "Crowd activity",
-                        "time": best_time or "",
-                        "source_link": f"https://outage.report/{check['slug'].strip('/')}",
-                        "feed_url": check["feed_url"],
-                        "fetched_at": check["fetched_at"],
-                        "instance": check["instance"],
-                    })
+                                if max_reports is None or n > max_reports:
+                                    max_reports = n
+                                    best_title = title
+                                    best_time = getattr(e, "published", "") or getattr(e, "updated", "")
+                            elif best_title is None:
+                                best_title = title
+                                best_time = getattr(e, "published", "") or getattr(e, "updated", "")
 
-            except Exception as e:
-                check["ok"] = False
-                check["error_type"] = type(e).__name__
-                check["error"] = str(e)[:300]
-                internal_diag["last_service_trace"] = traceback.format_exc()[-2000:]
+                        threshold = check["threshold"]
+                        if max_reports is not None and threshold is not None and max_reports >= threshold:
+                            triggered.append({
+                                "name": check["name"],
+                                "reports": max_reports,
+                                "threshold": threshold,
+                                "title": best_title or "Crowd activity",
+                                "time": best_time or "",
+                                "source_link": f"https://outage.report/{check['slug'].strip('/')}",
+                                "feed_url": check["feed_url"],
+                                "fetched_at": check["fetched_at"],
+                                "instance": check["instance"],
+                            })
 
-            finally:
-                check["elapsed_ms"] = int((time.time() - svc_t0) * 1000)
-                checks.append(check)
+                except Exception as e:
+                    check["ok"] = False
+                    check["error_type"] = type(e).__name__
+                    check["error"] = str(e)[:300]
+
+                finally:
+                    check["elapsed_ms"] = int((time.time() - svc_t0) * 1000)
+                    checks.append(check)   
 
         triggered.sort(key=lambda x: x.get("reports", 0), reverse=True)
 
