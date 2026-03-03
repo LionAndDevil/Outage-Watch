@@ -722,7 +722,8 @@ def render_crowd_results(state_key: str, label: str, debug_key: str, prefix: str
         st.error(f"{label} crowd check error: {state['error']}")
 
     if not state["triggered"]:
-        st.success(f"No crowd-report spikes detected ({label}).")
+        st.success("No services exceeded threshold.")
+        st.caption("Monitoring normal.")   
     else:
         for c in state["triggered"]:
             st.error(f"🔴 {c['name']} — {c['reports']} reports (threshold: {c['threshold']})")
