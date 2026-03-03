@@ -837,7 +837,7 @@ if show_debug_telecoms and ct.get("diag"):
 
     with st.expander("Telecoms crowd feed checks (sources & last fetched)", expanded=False):
         if not ct["checks"]:
-        st.info("No telecom checks recorded (unexpected).")
+            st.info("No telecom checks recorded (unexpected).")
         else:
             for chk in ct["checks"]:
             status_icon = "✅" if chk.get("ok") else "⚠️"
