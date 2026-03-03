@@ -39,6 +39,7 @@ RSSHUB_INSTANCES = [
     "https://hub.rss.direct",
     "https://rsshub.umzzz.com",
 ]
+MAX_RSSHUB_ATTEMPTS = 3  # cap fallback attempts for performance
 RSSHUB_OUTAGEREPORT_PATH_TEMPLATE = "/outagereport/{slug}/{count}"
 
 
@@ -419,7 +420,7 @@ def build_outagereport_feed_url(instance: str, slug: str, count: int) -> str:
 
 def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
     last_err = None
-    for inst in RSSHUB_INSTANCES:
+    for inst in RSSHUB_INSTANCES[:MAX_RSSHUB_ATTEMPTS]:
         url = build_outagereport_feed_url(inst, slug, count)
         try:
             content, fetched_at = fetch_url_with_time(url)
