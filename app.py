@@ -808,82 +808,13 @@ render_crowd_results(
 )
 
 st.divider()
-# Render results (Telecoms)
-st.markdown("### Crowd results: Telecoms")
 
-show_debug_telecoms = st.checkbox(
-    "Show diagnostics (Telecoms)",
-    value=False,
-    key="debug_telecoms"
+render_crowd_results(
+    state_key="crowd_telecoms",
+    label="Telecoms",
+    debug_key="debug_telecoms",
+    prefix="tel"
 )
-
-ct = st.session_state["crowd_telecoms"]
-
-if not ct["ran"]:
-    st.info("Not run yet. Click **Run crowd check: Telecoms**.")
-else:
-    st.caption(f"Last run: {ct['ran_at']}")
-    if ct.get("diag", {}).get("internal", {}).get("elapsed_ms") is not None:
-       elapsed_ms = ct["diag"]["internal"]["elapsed_ms"]
-       service_count = ct["diag"]["internal"].get("group_items_len", 0)
-       triggered_count = len(ct.get("triggered", []))
-       st.caption(
-           f"Checked {service_count} services in {round(elapsed_ms/1000,1)} seconds — "
-           f"{triggered_count} above threshold"
-    )
-
-if show_debug_telecoms and ct.get("diag"):
-    with st.expander("Diagnostics (Telecoms)", expanded=False):
-        st.json(ct["diag"])
-    if ct["error"]:
-        st.error(f"Telecoms crowd check error: {ct['error']}")
-    if not ct["triggered"]:
-        st.success("No crowd-report spikes detected (Telecoms).")
-    else:
-        for c in ct["triggered"]:
-            st.error(f"🔴 {c['name']} — {c['reports']} reports (threshold: {c['threshold']})")
-            cols = st.columns([3, 2])
-            with cols[0]:
-                st.write(f"• {c['title']}")
-                if c["time"]:
-                    st.write(f"• {c['time']}")
-                if c["fetched_at"]:
-                    st.write(f"• Last fetched: {c['fetched_at']} (via {c['instance']})")
-            with cols[1]:
-                st.link_button("Open crowd-signal source", c["source_link"], key=f"tel_src_{_safe_key_suffix(c['name'])}")
-                rss = _safe_http_url(c.get("feed_url", ""))
-                if rss:
-                    st.link_button("Open RSS feed", rss, key=f"tel_rss_{_safe_key_suffix(c['name'])}")
-
-    with st.expander("Telecoms crowd feed checks (sources & last fetched)", expanded=False):
-        if not ct["checks"]:
-            st.info("No telecom checks recorded (unexpected).")
-        else:
-            for chk in ct["checks"]:
-                status_icon = "✅" if chk.get("ok") else "⚠️"
-                st.write(f"{status_icon} {chk.get('name','')} — threshold ≥{chk.get('threshold','')}")
-
-            # --- Safe RSS rendering ---
-            safe_url = ""
-            feed_val = chk.get("feed_url")
-
-            if isinstance(feed_val, str):
-                safe_url = feed_val.strip()
-
-            if safe_url.startswith(("http://", "https://")) and len(safe_url) > 10:
-                try:
-                    st.link_button(
-                        "Open RSS feed",
-                        safe_url,
-                        key=f"tel_rss_{_safe_key_suffix(chk.get('slug',''))}"
-                    )
-                except Exception as e:
-                    st.caption(f"RSS render error: {e}")
-                    if chk.get("error"):
-                        st.caption(f"Error: {chk.get('error')}")
-
-            st.divider()
-
 # -----------------------
 # Poll official providers in parallel
 # -----------------------
