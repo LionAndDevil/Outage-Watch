@@ -17,6 +17,7 @@ st.title("Outage Watch")
 st.caption("BUILD: 2026-02-17 internal-diag-v4-run-exception")
 
 DEFAULT_TIMEOUT = 10
+CROWD_TIMEOUT = 6  # shorter timeout for crowd RSS
 
 # -----------------------
 # Crowd signals (Option A) - On demand checks (two groups)
@@ -423,7 +424,7 @@ def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
     for inst in RSSHUB_INSTANCES[:MAX_RSSHUB_ATTEMPTS]:
         url = build_outagereport_feed_url(inst, slug, count)
         try:
-            content, fetched_at = fetch_url_with_time(url)
+            content, fetched_at = fetch_url_with_time(url, timeout=CROWD_TIMEOUT)
             feed = feedparser.parse(content)
             entries = feed.entries or []
             return url, entries, fetched_at, inst, None
