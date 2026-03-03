@@ -840,8 +840,8 @@ if show_debug_telecoms and ct.get("diag"):
             st.info("No telecom checks recorded (unexpected).")
         else:
             for chk in ct["checks"]:
-            status_icon = "✅" if chk.get("ok") else "⚠️"
-            st.write(f"{status_icon} {chk.get('name','')} — threshold ≥{chk.get('threshold','')}")
+                status_icon = "✅" if chk.get("ok") else "⚠️"
+                st.write(f"{status_icon} {chk.get('name','')} — threshold ≥{chk.get('threshold','')}")
 
             # --- Safe RSS rendering ---
             safe_url = ""
