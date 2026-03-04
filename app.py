@@ -815,23 +815,25 @@ if run_telecoms:
 
 st.markdown("")
 
-with st.container():
-    render_crowd_results(
-        state_key="crowd_payments",
-        label="Payments & Banks",
-        debug_key="debug_payments",
-        prefix="pay"
-    )
+col_left, col_right = st.columns(2)
 
-st.divider()
+with col_left:
+    with st.container():
+        render_crowd_results(
+            state_key="crowd_payments",
+            label="Payments & Banks",
+            debug_key="debug_payments",
+            prefix="pay"
+        )
 
-with st.container():
-    render_crowd_results(
-        state_key="crowd_telecoms",
-        label="Telecoms",
-        debug_key="debug_telecoms",
-        prefix="tel"
-    )
+with col_right:
+    with st.container():
+        render_crowd_results(
+            state_key="crowd_telecoms",
+            label="Telecoms",
+            debug_key="debug_telecoms",
+            prefix="tel"
+        )
 # -----------------------
 # Poll official providers in parallel
 # -----------------------
