@@ -694,7 +694,7 @@ def render_crowd_results(state_key: str, label: str, debug_key: str, prefix: str
     show_debug = st.checkbox(
         f"Show diagnostics ({label})",
         value=False,
-        key=debug_key
+        key=f"{state_key}_{debug_key}"
     )
 
     state = st.session_state[state_key]
