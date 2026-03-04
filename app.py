@@ -791,16 +791,14 @@ with st.container():
 
     with col1:
         run_payments = st.button(
-            "🔍 Run Payments & Banks Crowd Checks",
-            use_container_width=True,
+            "Run Payments & Banks Crowd Checks",
             type="primary",
             key="btn_payments"
         )
 
     with col2:
         run_telecoms = st.button(
-            "🔍 Run Telecoms Crowd Checks",
-            use_container_width=True,
+            "Run Telecoms Crowd Checks",
             type="primary",
             key="btn_telecoms"
         )
