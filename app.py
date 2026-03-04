@@ -1,4 +1,4 @@
-import re
+import recol1, col2 = st.columns(2)
 import requests
 import feedparser
 from html import unescape
@@ -715,6 +715,7 @@ def render_crowd_results(state_key: str, label: str, debug_key: str, prefix: str
         col1.metric("Services checked", service_count)
         col2.metric("Runtime (seconds)", round(elapsed_ms / 1000, 1))
         col3.metric("Above threshold", triggered_count)
+        st.markdown("")
     if show_debug and state.get("diag"):
         with st.expander(f"Diagnostics ({label})", expanded=False):
             st.json(state["diag"])
@@ -812,6 +813,8 @@ if run_payments:
 if run_telecoms:
     with st.spinner("Running crowd check (Telecoms)…"):
         safe_run_group("crowd_telecoms", "telecoms")
+
+st.markdown("")
 
 with st.container():
     render_crowd_results(
