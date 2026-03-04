@@ -785,22 +785,40 @@ with st.expander("What is monitored (by group)", expanded=False):
     st.markdown("**Telecoms**")
     st.caption(", ".join([f"{s['name']} (≥{s['threshold']})" for s in telecom_items]) or "(none)")
 
-with st.container():
+col_left, col_right = st.columns(2)
 
-    col1, col2 = st.columns(2)
+with col_left:
+    run_payments = st.button(
+        "Run Payments & Banks Crowd Checks",
+        type="primary",
+        key="btn_payments"
+    )
 
-    with col1:
-        run_payments = st.button(
-            "Run Payments & Banks Crowd Checks",
-            type="primary",
-            key="btn_payments"
+    st.markdown("")
+
+    with st.container(border=True):
+        render_crowd_results(
+            state_key="crowd_payments",
+            label="Payments & Banks",
+            debug_key="debug_payments",
+            prefix="pay"
         )
 
-    with col2:
-        run_telecoms = st.button(
-            "Run Telecoms Crowd Checks",
-            type="primary",
-            key="btn_telecoms"
+with col_right:
+    run_telecoms = st.button(
+        "Run Telecoms Crowd Checks",
+        type="primary",
+        key="btn_telecoms"
+    )
+
+    st.markdown("")
+
+    with st.container(border=True):
+        render_crowd_results(
+            state_key="crowd_telecoms",
+            label="Telecoms",
+            debug_key="debug_telecoms",
+            prefix="tel"
         )
 
 if run_payments:
