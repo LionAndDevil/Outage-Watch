@@ -690,6 +690,7 @@ def safe_run_group(state_key: str, group_name: str):
 
 def render_crowd_results(state_key: str, label: str, debug_key: str, prefix: str):
     st.markdown(f"##### Results: {label}")
+    st.markdown("")
 
     show_debug = st.checkbox(
         f"Show diagnostics ({label})",
