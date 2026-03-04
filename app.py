@@ -796,7 +796,15 @@ with col_left:
 
     st.markdown("")
 
- with col_right:
+    with st.container(border=True):
+        render_crowd_results(
+            state_key="crowd_payments",
+            label="Payments & Banks",
+            debug_key="debug_payments",
+            prefix="pay"
+        )
+
+with col_right:
     run_telecoms = st.button(
         "Run Telecoms Crowd Checks",
         type="primary",
@@ -804,6 +812,14 @@ with col_left:
     )
 
     st.markdown("")
+
+    with st.container(border=True):
+        render_crowd_results(
+            state_key="crowd_telecoms",
+            label="Telecoms",
+            debug_key="debug_telecoms",
+            prefix="tel"
+        )
 
 if run_payments:
     with st.spinner("Running crowd check (Payments & Banks)…"):
