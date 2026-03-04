@@ -816,7 +816,7 @@ st.markdown("")
 col_left, col_right = st.columns(2)
 
 with col_left:
-    with st.container():
+    with st.container(border=True):
         render_crowd_results(
             state_key="crowd_payments",
             label="Payments & Banks",
@@ -825,7 +825,7 @@ with col_left:
         )
 
 with col_right:
-    with st.container():
+    with st.container(border=True):
         render_crowd_results(
             state_key="crowd_telecoms",
             label="Telecoms",
