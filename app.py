@@ -791,7 +791,7 @@ with st.container():
 
     with col1:
         run_payments = st.button(
-            "🔍 Check Payments & Banks",
+            "🔍 Run Payments & Banks Crowd Checks",
             use_container_width=True,
             type="primary",
             key="btn_payments"
@@ -799,7 +799,7 @@ with st.container():
 
     with col2:
         run_telecoms = st.button(
-            "🔍 Check Telecoms",
+            "🔍 Run Telecoms Crowd Checks",
             use_container_width=True,
             type="primary",
             key="btn_telecoms"
