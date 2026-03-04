@@ -785,7 +785,6 @@ with st.expander("What is monitored (by group)", expanded=False):
     st.caption(", ".join([f"{s['name']} (≥{s['threshold']})" for s in telecom_items]) or "(none)")
 
 with st.container():
-    st.markdown("#### Run crowd checks")
 
     col1, col2 = st.columns(2)
 
@@ -804,8 +803,6 @@ with st.container():
             type="primary",
             key="btn_telecoms"
         )
-
-    st.caption("Crowd checks run on demand.")
 
 if run_payments:
     with st.spinner("Running crowd check (Payments & Banks)…"):
