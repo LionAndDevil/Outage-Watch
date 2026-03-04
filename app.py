@@ -850,6 +850,7 @@ results.sort(key=lambda r: (severity_order.get(r["level"], 99), r["name"].lower(
 # -----------------------
 # Render official status cards
 # -----------------------
+st.markdown("---")
 st.subheader("Official status")
 for r in results:
     if r["level"] not in show:
