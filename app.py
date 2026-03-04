@@ -793,6 +793,7 @@ with st.container():
         run_payments = st.button(
             "🔍 Check Payments & Banks",
             use_container_width=True,
+            type="primary",
             key="btn_payments"
         )
 
@@ -800,6 +801,7 @@ with st.container():
         run_telecoms = st.button(
             "🔍 Check Telecoms",
             use_container_width=True,
+            type="primary",
             key="btn_telecoms"
         )
 
