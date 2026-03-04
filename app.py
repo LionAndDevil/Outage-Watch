@@ -1,4 +1,3 @@
-import recol1, col2 = st.columns(2)
 import requests
 import feedparser
 from html import unescape
