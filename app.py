@@ -197,23 +197,23 @@ def summarize_statuspage(url):
     except Exception as e:
         return "unknown", [f"Fetch error: {e}"]
 
-   indicator = (data.get("status", {}) or {}).get("indicator", "none")
+indicator = (data.get("status", {}) or {}).get("indicator", "none")
 
-   incidents = data.get("incidents") or []
-   maint = data.get("scheduled_maintenances") or []
+incidents = data.get("incidents") or []
+maint = data.get("scheduled_maintenances") or []
 
-   # Only incidents affect severity (ignore maintenance)
-   major = indicator in {"major", "critical"} or any(i.get("impact") in {"major", "critical"} for i in incidents)
-   degraded = (indicator == "minor") or bool(incidents)
+# Only incidents affect severity (ignore maintenance)
+major = indicator in {"major", "critical"} or any(i.get("impact") in {"major", "critical"} for i in incidents)
+degraded = (indicator == "minor") or bool(incidents)
 
-    level = "major" if major else ("degraded" if degraded else "ok")
-    details = []
-    for i in incidents[:3]:
-        title = i.get("name", "Incident")
-        impact = i.get("impact", "n/a")
-        upd = i.get("updated_at") or i.get("created_at") or ""
-        details.append(f"{title} — impact: {impact} — updated: {upd}")
-    return level, details
+level = "major" if major else ("degraded" if degraded else "ok")
+details = []
+for i in incidents[:3]:
+    title = i.get("name", "Incident")
+    impact = i.get("impact", "n/a")
+    upd = i.get("updated_at") or i.get("created_at") or ""
+    details.append(f"{title} — impact: {impact} — updated: {upd}")
+return level, details
 
 
 def summarize_statuspage_try(base_url: str):
