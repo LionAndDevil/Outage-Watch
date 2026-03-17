@@ -96,6 +96,8 @@ CROWD_ALLOWLIST = [
 PROVIDERS = [
     {"name": "AWS", "kind": "rss", "url": "https://status.aws.amazon.com/rss/all.rss",
      "status_page": "https://health.aws.amazon.com/health/status"},
+    {"name": "Cloudflare", "kind": "statuspage", "url": "https://www.cloudflarestatus.com/api/v2/summary.json",
+     "status_page": "https://www.cloudflarestatus.com/"},
     {"name": "Azure", "kind": "rss", "url": "https://azurestatuscdn.azureedge.net/en-us/status/feed/",
      "status_page": "https://azure.status.microsoft"},
     {"name": "Google Cloud (GCP)", "kind": "gcp_incidents", "url": "https://status.cloud.google.com/incidents.json",
