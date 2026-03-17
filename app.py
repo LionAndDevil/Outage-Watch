@@ -199,12 +199,12 @@ def summarize_statuspage(url):
 
    indicator = (data.get("status", {}) or {}).get("indicator", "none")
 
-    incidents = data.get("incidents") or []
-    maint = data.get("scheduled_maintenances") or []
+   incidents = data.get("incidents") or []
+   maint = data.get("scheduled_maintenances") or []
 
-    # Only incidents affect severity (ignore maintenance)
-    major = indicator in {"major", "critical"} or any(i.get("impact") in {"major", "critical"} for i in incidents)
-    degraded = (indicator == "minor") or bool(incidents)
+   # Only incidents affect severity (ignore maintenance)
+   major = indicator in {"major", "critical"} or any(i.get("impact") in {"major", "critical"} for i in incidents)
+   degraded = (indicator == "minor") or bool(incidents)
 
     level = "major" if major else ("degraded" if degraded else "ok")
     details = []
