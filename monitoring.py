@@ -308,8 +308,8 @@ def summarize_google_workspace_incidents(url):
 
 def summarize_stripe_json(url):
     data, _, ok, _ = fetch_json(url)
-if not ok or data is None:
-    return "unknown", ["Fetch/parse error"]
+    if not ok or data is None:
+        return "unknown", ["Fetch/parse error"]
 
     indicator = None
     if isinstance(data, dict):
