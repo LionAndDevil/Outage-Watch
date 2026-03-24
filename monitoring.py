@@ -203,9 +203,8 @@ def summarize_statuspage_try(base_url: str):
     for endpoint in ["/api/v2/summary.json", "/api/v2/status.json"]:
         url = base_url.rstrip("/") + endpoint
         tried.append(endpoint)
-        try:
-            data = fetch_json(url)
-        except Exception:
+        data, _, ok, _ = fetch_json(url)
+        if not ok or data is None:
             continue
 
         status_obj = data.get("status") if isinstance(data, dict) else None
@@ -256,10 +255,9 @@ def summarize_rss(url):
 
 
 def summarize_gcp_incidents(url):
-    try:
-        incidents = fetch_json(url)
-    except Exception as e:
-        return "unknown", [f"Fetch/parse error: {e}"]
+    incidents, _, ok, _ = fetch_json(url)
+    if not ok or incidents is None:
+        return "unknown", [f"Fetch/parse error"]
 
     if not incidents:
         return "ok", []
@@ -282,10 +280,9 @@ def summarize_gcp_incidents(url):
 
 
 def summarize_google_workspace_incidents(url):
-    try:
-        incidents = fetch_json(url)
-    except Exception as e:
-        return "unknown", [f"Fetch/parse error: {e}"]
+    incidents, _, ok, _ = fetch_json(url)
+    if not ok or incidents is None:
+        return "unknown", [f"Fetch/parse error"]
 
     if not incidents:
         return "ok", []
@@ -310,12 +307,9 @@ def summarize_google_workspace_incidents(url):
 
 
 def summarize_stripe_json(url):
-    try:
-        data, _, ok, _ = fetch_json(url)
-        if not ok or data is None:
-            return "unknown", ["Fetch/parse error"]
-    except Exception as e:
-        return "unknown", [f"Fetch/parse error: {e}"]
+    data, _, ok, _ = fetch_json(url)
+if not ok or data is None:
+    return "unknown", ["Fetch/parse error"]
 
     indicator = None
     if isinstance(data, dict):
