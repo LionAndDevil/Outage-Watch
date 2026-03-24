@@ -3,3 +3,5 @@ requests
 feedparser
 streamlit-autorefresh
 beautifulsoup4
+fastapi
+uvicorn
