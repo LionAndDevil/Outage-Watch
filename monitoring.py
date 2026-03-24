@@ -381,3 +381,193 @@ def summarize(provider):
         return summarize_link_only(provider)
 
     return "unknown", [f"Unsupported provider kind: {kind}"]
+
+# -----------------------
+# Crowd signals helpers (on demand)
+# -----------------------
+def build_outagereport_feed_url(instance: str, slug: str, count: int) -> str:
+    return instance.rstrip("/") + RSSHUB_OUTAGEREPORT_PATH_TEMPLATE.format(slug=slug.strip("/"), count=count)
+
+
+def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
+    last_err = None
+    for inst in RSSHUB_INSTANCES[:MAX_RSSHUB_ATTEMPTS]:
+        url = build_outagereport_feed_url(inst, slug, count)
+        try:
+            content, fetched_at = fetch_url_with_time(url, timeout=CROWD_TIMEOUT)
+            feed = feedparser.parse(content)
+            entries = feed.entries or []
+            return url, entries, fetched_at, inst, None
+        except requests.HTTPError as e:
+            status = getattr(e.response, "status_code", None)
+            if status in {403, 429, 500, 502, 503, 504}:
+                last_err = e
+                continue
+            last_err = e
+            continue
+        except Exception as e:
+            last_err = e
+            continue
+    return None, [], None, None, last_err
+
+
+def run_crowd_signals_for_group(group_name: str):
+    import time, traceback
+
+    t0 = time.time()
+
+    group_items = [s for s in CROWD_ALLOWLIST if s.get("group") == group_name]
+    triggered = []
+    checks = []
+
+    internal_diag = {
+        "group_name": group_name,
+        "group_items_len": len(group_items),
+        "entered_loop": False,
+        "checks_len_end": 0,
+        "checkpoint_before_loop": True,
+        "checkpoint_after_loop": False,
+        "elapsed_ms": None,
+        "crash_error": "",
+    }
+
+    try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            future_map = {
+                executor.submit(fetch_crowd_feed_with_fallback, s["slug"], 10): s
+                for s in group_items
+            }
+
+            for future in as_completed(future_map):
+                s = future_map[future]
+                svc_t0 = time.time()
+
+                check = {
+                    "name": s.get("name", ""),
+                    "slug": s.get("slug", ""),
+                    "threshold": s.get("threshold", None),
+                    "feed_url": "",
+                    "fetched_at": "",
+                    "instance": "",
+                    "ok": False,
+                    "error": "",
+                    "error_type": "",
+                    "elapsed_ms": None,
+                }
+
+                try:
+                    feed_url, entries, fetched_at, inst_used, err = future.result()
+
+                    check["feed_url"] = feed_url if isinstance(feed_url, str) else ""
+                    check["fetched_at"] = fetched_at or ""
+                    check["instance"] = inst_used or ""
+                    check["ok"] = err is None
+                    check["error"] = str(err) if err else ""
+                    check["error_type"] = type(err).__name__ if err else ""
+
+                    if entries:
+                        max_reports = None
+                        best_title = None
+                        best_time = None
+
+                        for e in entries[:5]:
+                            raw_title = getattr(e, "title", None)
+                            title = unescape(raw_title) if isinstance(raw_title, str) else "Update"
+                            t_lower = title.lower()
+
+                            m = (
+                                re.search(r"(\d+)\s+reports?", t_lower)
+                                or re.search(r"reports?\s*[:\-]\s*(\d+)", t_lower)
+                            )
+
+                            if m:
+                                try:
+                                    n = int(m.group(1))
+                                except Exception:
+                                    continue
+
+                                if max_reports is None or n > max_reports:
+                                    max_reports = n
+                                    best_title = title
+                                    best_time = getattr(e, "published", "") or getattr(e, "updated", "")
+                            elif best_title is None:
+                                best_title = title
+                                best_time = getattr(e, "published", "") or getattr(e, "updated", "")
+
+                        threshold = check["threshold"]
+                        if max_reports is not None and threshold is not None and max_reports >= threshold:
+                            triggered.append({
+                                "name": check["name"],
+                                "reports": max_reports,
+                                "threshold": threshold,
+                                "title": best_title or "Crowd activity",
+                                "time": best_time or "",
+                                "source_link": f"https://outage.report/{check['slug'].strip('/')}",
+                                "feed_url": check["feed_url"],
+                                "fetched_at": check["fetched_at"],
+                                "instance": check["instance"],
+                            })
+
+                except Exception as e:
+                    check["ok"] = False
+                    check["error_type"] = type(e).__name__
+                    check["error"] = str(e)[:300]
+
+                finally:
+                    check["elapsed_ms"] = int((time.time() - svc_t0) * 1000)
+                    checks.append(check)   
+
+        triggered.sort(key=lambda x: x.get("reports", 0), reverse=True)
+
+        internal_diag["checkpoint_after_loop"] = True
+        internal_diag["checks_len_end"] = len(checks)
+        internal_diag["elapsed_ms"] = int((time.time() - t0) * 1000)
+
+    except Exception:
+        internal_diag["crash_error"] = traceback.format_exc()[-4000:]
+        internal_diag["checks_len_end"] = len(checks)
+        internal_diag["elapsed_ms"] = int((time.time() - t0) * 1000)
+
+    return triggered, checks, internal_diag
+
+
+def _now_utc_str():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+def get_official_results():
+    results = []
+    max_workers = min(12, max(4, len(PROVIDERS)))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        future_map = {ex.submit(summarize, p): p for p in PROVIDERS}
+
+        for fut in as_completed(future_map):
+            p = future_map[fut]
+            try:
+                level, details = fut.result()
+            except Exception as e:
+                level, details = "unknown", [f"Unhandled error: {e}"]
+
+            results.append({
+                "name": p["name"],
+                "kind": p["kind"],
+                "status_page": p.get("status_page", ""),
+                "level": level,
+                "details": details,
+                "source_type": "official",
+            })
+
+    return sorted(results, key=lambda r: r["name"].lower())
+
+
+def get_crowd_results(group_name: str):
+    triggered, checks, diag = run_crowd_signals_for_group(group_name)
+    return {
+        "group": group_name,
+        "triggered": triggered,
+        "checks": checks,
+        "diag": diag,
+        "source_type": "crowd",
+    }
