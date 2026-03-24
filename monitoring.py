@@ -129,14 +129,27 @@ def fetch_url_with_time(url: str, timeout: int = DEFAULT_TIMEOUT):
         ),
         "Accept": "*/*",
     }
-    r = requests.get(url, timeout=3, headers=headers)
-    r.raise_for_status()
-    fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    return r.content, fetched_at
+    try:
+        r = requests.get(url, timeout=3, headers=headers)
+        r.raise_for_status()
+        fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        return r.content, fetched_at, True, None
+    except Exception as e:
+        return None, None, False, str(e)
 
 def fetch_json(url: str):
-    raw, _ = fetch_url_with_time(url)
-    return requests.models.complexjson.loads(raw.decode("utf-8", errors="replace"))
+    raw, fetched_at, ok, error = fetch_url_with_time(url)
+
+    if not ok or raw is None:
+        return None, fetched_at, ok, error
+
+    try:
+        data = requests.models.complexjson.loads(
+            raw.decode("utf-8", errors="replace")
+        )
+        return data, fetched_at, True, None
+    except Exception as e:
+        return None, fetched_at, False, str(e)
 
 def _rss_level_from_title(title_lower: str) -> str:
     major_words = ["major outage", "outage", "unavailable", "down"]
