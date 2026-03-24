@@ -1,7 +1,7 @@
 import re
 import json
 import time
-import requests
+import requestsrequests.get
 import feedparser
 from html import unescape
 from bs4 import BeautifulSoup
@@ -129,7 +129,7 @@ def fetch_url_with_time(url: str, timeout: int = DEFAULT_TIMEOUT):
         ),
         "Accept": "*/*",
     }
-    r = requests.get(url, timeout=timeout, headers=headers)
+    r = requests.get(url, timeout=3, headers=headers)
     r.raise_for_status()
     fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     return r.content, fetched_at
