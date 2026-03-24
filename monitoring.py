@@ -1,7 +1,7 @@
 import re
 import json
 import time
-import requestsrequests.get
+import requests
 import feedparser
 from html import unescape
 from bs4 import BeautifulSoup
