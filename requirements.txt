@@ -2,3 +2,4 @@ streamlit
 requests
 feedparser
 streamlit-autorefresh
+beautifulsoup4
