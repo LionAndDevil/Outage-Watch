@@ -15,9 +15,6 @@ from monitoring import get_official_results, get_crowd_results
 st.set_page_config(page_title="Outage Watch", layout="wide")
 st.title("Outage Watch")
 
-test_results = get_official_results()
-st.write(test_results[:3])
-
 # Build marker (helps confirm Streamlit is running the latest commit)
 st.caption("BUILD: 2026-02-17 internal-diag-v4-run-exception")
 
