@@ -173,7 +173,9 @@ def _rss_level_from_title(title_lower: str) -> str:
 # -----------------------
 def summarize_statuspage(url):
     try:
-        data = fetch_json(url)
+        data, _, ok, _ = fetch_json(url)
+        if not ok or data is None:
+            return "unknown", ["fetch failed"]
     except Exception as e:
         return "unknown", [f"Fetch error: {e}"]
 
@@ -309,7 +311,9 @@ def summarize_google_workspace_incidents(url):
 
 def summarize_stripe_json(url):
     try:
-        data = fetch_json(url)
+        data, _, ok, _ = fetch_json(url)
+        if not ok or data is None:
+            return "unknown", ["Fetch/parse error"]
     except Exception as e:
         return "unknown", [f"Fetch/parse error: {e}"]
 
