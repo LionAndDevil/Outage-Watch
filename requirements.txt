@@ -5,3 +5,4 @@ streamlit-autorefresh
 beautifulsoup4
 fastapi
 uvicorn
+openai>=1.0.0,<2.0.0
