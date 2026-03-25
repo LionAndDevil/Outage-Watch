@@ -252,7 +252,6 @@ def summarize_rss(url):
 
     return level, details[:3]
 
-
 def summarize_gcp_incidents(url):
     incidents, _, ok, _ = fetch_json(url)
     if not ok or incidents is None:
