@@ -572,10 +572,12 @@ def get_official_results():
 
 def get_crowd_results(group_name: str):
     triggered, checks, diag = run_crowd_signals_for_group(group_name)
+    checks = [c for c in checks if c.get("ok")]
+
     return {
         "group": group_name,
         "triggered": triggered,
         "checks": checks,
         "diag": diag,
         "source_type": "crowd",
-    }
+}
