@@ -6,7 +6,7 @@ app = FastAPI(
     version="1.0.0",
     servers=[
         {
-            "url": "https://outage-watch-api.onrender.com/",
+            "url": "https://outage-watch-api.onrender.com",
             "description": "Production server"
         }
     ]
