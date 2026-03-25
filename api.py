@@ -1,7 +1,10 @@
 from fastapi import FastAPI
 from monitoring import get_official_results, get_crowd_results
 
-app = FastAPI(title="Outage Watch API")
+app = FastAPI(
+    title="Outage Watch API",
+    servers=[{"url": "https://outage-watch-api.onrender.com"}]
+)
 
 @app.get("/")
 def root():
