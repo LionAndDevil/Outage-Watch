@@ -226,8 +226,7 @@ def summarize_rss(url):
    if not ok or content is None:
        return "unknown", ["Fetch/parse error"]
 
-feed = feedparser.parse(content)
-
+    feed = feedparser.parse(content)
     entries = feed.entries or []
     if not entries:
         return "ok", []
