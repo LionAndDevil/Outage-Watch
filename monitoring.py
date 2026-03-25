@@ -222,11 +222,11 @@ def summarize_statuspage_try(base_url: str):
 
 
 def summarize_rss(url):
-    try:
-        content, _ = fetch_url_with_time(url)
-        feed = feedparser.parse(content)
-    except Exception as e:
-        return "unknown", [f"Fetch/parse error: {e}"]
+   content, _, ok, _ = fetch_url_with_time(url)
+   if not ok or content is None:
+       return "unknown", ["Fetch/parse error"]
+
+feed = feedparser.parse(content)
 
     entries = feed.entries or []
     if not entries:
@@ -326,11 +326,11 @@ def summarize_stripe_json(url):
     return "ok", []
 
 def summarize_statuspage_html(url):
-    try:
-        html, _ = fetch_url_with_time(url)
-        html = html.decode("utf-8", errors="replace").lower()
-    except Exception as e:
-        return "unknown", [f"Fetch error: {e}"]
+    html, _, ok, _ = fetch_url_with_time(url)
+    if not ok or html is None:
+        return "unknown", ["Fetch error"]
+
+    html = html.decode("utf-8", errors="replace").lower()
 
     top = html.split("past incidents", 1)[0]
 
@@ -343,11 +343,11 @@ def summarize_statuspage_html(url):
     return "unknown", ["See official status page for details."]
 
 def summarize_mastercard_dev_html(url):
-    try:
-        html, _ = fetch_url_with_time(url)
-        html = html.decode("utf-8", errors="replace")
-    except Exception as e:
-        return "unknown", [f"Fetch error: {e}"]
+    html, _, ok, _ = fetch_url_with_time(url)
+    if not ok or html is None:
+        return "unknown", ["Fetch error"]
+
+html = html.decode("utf-8", errors="replace")
 
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip().lower()
 
@@ -405,7 +405,10 @@ def fetch_crowd_feed_with_fallback(slug: str, count: int = 10):
     for inst in RSSHUB_INSTANCES[:MAX_RSSHUB_ATTEMPTS]:
         url = build_outagereport_feed_url(inst, slug, count)
         try:
-            content, fetched_at = fetch_url_with_time(url, timeout=CROWD_TIMEOUT)
+            content, fetched_at, ok, error = fetch_url_with_time(url, timeout=CROWD_TIMEOUT)
+            if not ok or content is None:
+                last_err = Exception(error or "fetch failed")
+                continue
             feed = feedparser.parse(content)
             entries = feed.entries or []
             return url, entries, fetched_at, inst, None
