@@ -3,6 +3,10 @@ from monitoring import get_official_results, get_crowd_results
 
 app = FastAPI(title="Outage Watch API")
 
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "outage-watch-api"}
+
 @app.get("/health")
 def health():
     return {"ok": True}
