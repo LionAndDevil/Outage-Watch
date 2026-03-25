@@ -220,7 +220,6 @@ def summarize_statuspage_try(base_url: str):
 
     return "info", [f"No public JSON endpoints responded ({', '.join(tried)})."]
 
-
 def summarize_rss(url):
     content, _, ok, _ = fetch_url_with_time(url)
     if not ok or content is None:
