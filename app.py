@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 import re
 
 import streamlit as st
+import json
+from openai import OpenAI
 
 from monitoring import get_official_results, get_crowd_results
 
@@ -581,7 +583,12 @@ if "crowd_payments" not in st.session_state:
     st.session_state["crowd_payments"] = {"ran": False, "ran_at": "", "triggered": [], "checks": [], "error": "", "diag": {}}
 if "crowd_telecoms" not in st.session_state:
     st.session_state["crowd_telecoms"] = {"ran": False, "ran_at": "", "triggered": [], "checks": [], "error": "", "diag": {}}
+if "ai_analysis" not in st.session_state:
+    st.session_state["ai_analysis"] = None
 
+if "ai_analysis_error" not in st.session_state:
+    st.session_state["ai_analysis_error"] = None
+    
 # -----------------------
 # Auto-refresh behavior (no component dependency)
 # -----------------------
@@ -763,6 +770,54 @@ def render_crowd_results(state_key: str, label: str, debug_key: str, prefix: str
             for chk in state["checks"]:
                 status_icon = "✅" if chk.get("ok") else "⚠️"
                 st.write(f"{status_icon} {chk.get('name','')} — threshold ≥{chk.get('threshold','')}")
+                # -----------------------
+# AI Analysis Layer
+# -----------------------
+def get_ai_analysis(official_results, payments_crowd, telecoms_crowd):
+    api_key = st.secrets.get("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("Missing OPENAI_API_KEY in Streamlit secrets.")
+
+    client = OpenAI(api_key=api_key)
+
+    payload = {
+        "official": official_results,
+        "crowd": {
+            "payments": payments_crowd,
+            "telecoms": telecoms_crowd,
+        },
+    }
+
+    system_prompt = (
+        "You analyze outage monitoring data. "
+        "Combine official outage data with crowd signals. "
+        "Crowd signals indicate early warning and user-level impact."
+    )
+
+    user_prompt = (
+        "Analyze the outage situation.\n\n"
+        "Return:\n"
+        "1. Overall status\n"
+        "2. Confirmed issues\n"
+        "3. Early indicators\n"
+        "4. Interpretation\n"
+        "5. Bottom line\n\n"
+        "Rules:\n"
+        "- If official issues exist but crowd is quiet → low propagation\n"
+        "- If crowd spikes exist → early disruption\n"
+        "- Keep concise\n\n"
+        f"{json.dumps(payload, ensure_ascii=False)}"
+    )
+
+    response = client.responses.create(
+        model="gpt-5-mini",
+        input=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+
+    return response.output_text.strip()
 # -----------------------
 # UI controls
 # -----------------------
@@ -899,3 +954,39 @@ for r in results:
                     st.write("• " + d)
 
     st.divider()
+# -----------------------
+# AI Analysis Layer UI
+# -----------------------
+st.markdown("---")
+st.subheader("Analysis Layer")
+
+# Build inputs
+official_results_for_ai = results
+
+payments_crowd_for_ai = st.session_state.get("crowd_payments", {}).get("triggered")
+telecoms_crowd_for_ai = st.session_state.get("crowd_telecoms", {}).get("triggered")
+
+# Button
+if st.button("Generate analysis"):
+    st.session_state["ai_analysis"] = None
+    st.session_state["ai_analysis_error"] = None
+
+    with st.spinner("Generating analysis..."):
+        try:
+            st.session_state["ai_analysis"] = get_ai_analysis(
+                official_results_for_ai,
+                payments_crowd_for_ai,
+                telecoms_crowd_for_ai,
+            )
+        except Exception as e:
+            st.session_state["ai_analysis_error"] = str(e)
+
+# Display results
+if st.session_state.get("ai_analysis_error"):
+    st.error(f"Analysis error: {st.session_state['ai_analysis_error']}")
+
+elif st.session_state.get("ai_analysis"):
+    st.markdown(st.session_state["ai_analysis"])
+
+else:
+    st.caption("Click 'Generate analysis' to interpret current signals.")
