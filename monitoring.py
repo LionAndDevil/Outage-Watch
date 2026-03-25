@@ -344,8 +344,7 @@ def summarize_mastercard_dev_html(url):
     if not ok or html is None:
         return "unknown", ["Fetch error"]
 
-html = html.decode("utf-8", errors="replace")
-
+    html = html.decode("utf-8", errors="replace")
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip().lower()
 
     if len(text) < 200:
@@ -360,10 +359,8 @@ html = html.decode("utf-8", errors="replace")
 
     return "info", ["Unable to classify from page text; see official status page."]
 
-
 def summarize_link_only(provider):
     return "info", [provider.get("note") or "See official status page."]
-
 
 def summarize(provider):
     kind = provider["kind"]
