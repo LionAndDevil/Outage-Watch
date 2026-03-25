@@ -3,7 +3,13 @@ from monitoring import get_official_results, get_crowd_results
 
 app = FastAPI(
     title="Outage Watch API",
-    servers=[{"url": "https://outage-watch-api.onrender.com"}]
+    version="1.0.0",
+    servers=[
+        {
+            "url": "https://outage-watch-api.onrender.com/",
+            "description": "Production server"
+        }
+    ]
 )
 
 @app.get("/")
