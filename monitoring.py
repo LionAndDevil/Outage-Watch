@@ -222,9 +222,9 @@ def summarize_statuspage_try(base_url: str):
 
 
 def summarize_rss(url):
-   content, _, ok, _ = fetch_url_with_time(url)
-   if not ok or content is None:
-       return "unknown", ["Fetch/parse error"]
+    content, _, ok, _ = fetch_url_with_time(url)
+    if not ok or content is None:
+        return "unknown", ["Fetch/parse error"]
 
     feed = feedparser.parse(content)
     entries = feed.entries or []
