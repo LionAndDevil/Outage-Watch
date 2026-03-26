@@ -910,7 +910,27 @@ st.markdown(
     "Use the Outage Watch GPT for interpreted analysis of current signals."
 )
 
-st.link_button(
-    "Analyze current outages (GPT)",
-    "https://chatgpt.com/g/g-69c3b60ede108191beab0c5d5c172d5a-outage-watch"
+st.markdown(
+    """
+    <style>
+    .gpt-btn:hover {
+        background-color:#e04343 !important;
+    }
+    </style>
+
+    <a href="https://chatgpt.com/g/g-69c3b60ede108191beab0c5d5c172d5a-outage-watch" target="_blank">
+        <button class="gpt-btn" style="
+            background-color:#FF4B4B;
+            color:white;
+            padding:0.5em 1em;
+            border:none;
+            border-radius:8px;
+            font-size:16px;
+            font-weight:500;
+            cursor:pointer;">
+            Analyze current outages (GPT)
+        </button>
+    </a>
+    """,
+    unsafe_allow_html=True
 )
