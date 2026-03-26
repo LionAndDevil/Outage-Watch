@@ -912,5 +912,5 @@ st.markdown(
 
 st.link_button(
     "Open Outage Watch GPT",
-    "PASTE_YOUR_GPT_LINK_HERE"
+    "https://chatgpt.com/g/g-69c3b60ede108191beab0c5d5c172d5a-outage-watch"
 )
