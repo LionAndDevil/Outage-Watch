@@ -960,33 +960,39 @@ for r in results:
 st.markdown("---")
 st.subheader("Analysis Layer")
 
-# Build inputs
-official_results_for_ai = results
+# Toggle (set to True later when API is available)
+api_enabled = False
 
+# Build inputs (keep this even if disabled)
+official_results_for_ai = results
 payments_crowd_for_ai = st.session_state.get("crowd_payments", {}).get("triggered")
 telecoms_crowd_for_ai = st.session_state.get("crowd_telecoms", {}).get("triggered")
 
-# Button
-if st.button("Generate analysis"):
-    st.session_state["ai_analysis"] = None
-    st.session_state["ai_analysis_error"] = None
-
-    with st.spinner("Generating analysis..."):
-        try:
-            st.session_state["ai_analysis"] = get_ai_analysis(
-                official_results_for_ai,
-                payments_crowd_for_ai,
-                telecoms_crowd_for_ai,
-            )
-        except Exception as e:
-            st.session_state["ai_analysis_error"] = str(e)
-
-# Display results
-if st.session_state.get("ai_analysis_error"):
-    st.error(f"Analysis error: {st.session_state['ai_analysis_error']}")
-
-elif st.session_state.get("ai_analysis"):
-    st.markdown(st.session_state["ai_analysis"])
+if not api_enabled:
+    st.caption("AI analysis temporarily disabled (API quota unavailable).")
 
 else:
-    st.caption("Click 'Generate analysis' to interpret current signals.")
+    # Button
+    if st.button("Generate analysis"):
+        st.session_state["ai_analysis"] = None
+        st.session_state["ai_analysis_error"] = None
+
+        with st.spinner("Generating analysis..."):
+            try:
+                st.session_state["ai_analysis"] = get_ai_analysis(
+                    official_results_for_ai,
+                    payments_crowd_for_ai,
+                    telecoms_crowd_for_ai,
+                )
+            except Exception as e:
+                st.session_state["ai_analysis_error"] = str(e)
+
+    # Display
+    if st.session_state.get("ai_analysis_error"):
+        st.error(f"Analysis error: {st.session_state['ai_analysis_error']}")
+
+    elif st.session_state.get("ai_analysis"):
+        st.markdown(st.session_state["ai_analysis"])
+
+    else:
+        st.caption("Click 'Generate analysis' to interpret current signals.")
