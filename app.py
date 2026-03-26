@@ -996,3 +996,17 @@ else:
 
     else:
         st.caption("Click 'Generate analysis' to interpret current signals.")
+        # -----------------------
+# Analysis (via GPT)
+# -----------------------
+st.markdown("---")
+st.subheader("Analysis")
+
+st.markdown(
+    "Use the Outage Watch GPT for interpreted analysis of current signals."
+)
+
+st.link_button(
+    "Open Outage Watch GPT",
+    "PASTE_YOUR_GPT_LINK_HERE"
+)
